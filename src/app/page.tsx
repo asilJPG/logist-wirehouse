@@ -10,7 +10,6 @@ interface Part {
   brand: string;
   quantity: number;
   price: number;
-  location: string | null;
   description: string | null;
   image_url: string | null;
 }
@@ -134,7 +133,6 @@ export default function HomePage() {
                   <th>Название</th>
                   <th>Цена</th>
                   <th>Наличие</th>
-                  <th>Место</th>
                   <th>Описание</th>
                 </tr>
               </thead>
@@ -186,7 +184,6 @@ export default function HomePage() {
                         <span className="status-badge status-out-of-stock">Нет</span>
                       )}
                     </td>
-                    <td>{part.location || '—'}</td>
                     <td style={{ fontSize: '16px', color: 'var(--text-muted)' }}>{part.description || '—'}</td>
                   </tr>
                 ))}
@@ -244,10 +241,7 @@ export default function HomePage() {
                     )}
                   </span>
                 </div>
-                <div className="part-card-row">
-                  <span className="part-card-label">Место хранения:</span>
-                  <span className="part-card-value">{part.location || '—'}</span>
-                </div>
+
                 {part.description && (
                   <div
                     style={{

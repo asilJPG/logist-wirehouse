@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS public.parts (
     brand TEXT NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 0,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-    location TEXT,
     description TEXT,
     image_url TEXT, -- Ссылка на фотографию запчасти в Supabase Storage
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -24,7 +23,8 @@ CREATE TABLE IF NOT EXISTS public.admins (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Если таблица parts уже была создана ранее, добавим колонку image_url вручную:
+-- Если таблица parts уже создана, удалим ненужное поле location и добавим нужное image_url:
+ALTER TABLE public.parts DROP COLUMN IF EXISTS location;
 ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 -- 3. Автоматическое обновление updated_at при изменении записи parts

@@ -11,7 +11,6 @@ interface Part {
   brand: string;
   quantity: number;
   price: number;
-  location: string | null;
   description: string | null;
   image_url: string | null;
 }
@@ -44,7 +43,6 @@ export default function AdminDashboardPage() {
   const [newBrand, setNewBrand] = useState('');
   const [newPrice, setNewPrice] = useState('0');
   const [newQuantity, setNewQuantity] = useState('0');
-  const [newLocation, setNewLocation] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [addingPart, setAddingPart] = useState(false);
@@ -56,7 +54,6 @@ export default function AdminDashboardPage() {
   const [editBrand, setEditBrand] = useState('');
   const [editPrice, setEditPrice] = useState('0');
   const [editQuantity, setEditQuantity] = useState('0');
-  const [editLocation, setEditLocation] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editImageUrl, setEditImageUrl] = useState<string | null>(null);
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
@@ -271,7 +268,6 @@ export default function AdminDashboardPage() {
           brand: newBrand.trim(),
           price: priceNum,
           quantity: qtyNum,
-          location: newLocation.trim() || null,
           description: newDescription.trim() || null,
           image_url: imageUrl,
         },
@@ -288,7 +284,6 @@ export default function AdminDashboardPage() {
       setNewBrand('');
       setNewPrice('0');
       setNewQuantity('0');
-      setNewLocation('');
       setNewDescription('');
       setNewImageFile(null);
       
@@ -314,7 +309,6 @@ export default function AdminDashboardPage() {
     setEditBrand(part.brand);
     setEditPrice(part.price.toString());
     setEditQuantity(part.quantity.toString());
-    setEditLocation(part.location || '');
     setEditDescription(part.description || '');
     setEditImageUrl(part.image_url);
     setEditImageFile(null);
@@ -361,7 +355,6 @@ export default function AdminDashboardPage() {
           brand: editBrand.trim(),
           price: priceNum,
           quantity: qtyNum,
-          location: editLocation.trim() || null,
           description: editDescription.trim() || null,
           image_url: finalImageUrl,
         })
@@ -552,12 +545,9 @@ export default function AdminDashboardPage() {
                             <strong style={{ fontFamily: 'monospace', fontSize: '18px', display: 'block' }}>{part.article}</strong>
                             <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{part.brand}</span>
                           </td>
-                          {/* Название и место */}
+                          {/* Название */}
                           <td>
                             <strong style={{ display: 'block' }}>{part.name}</strong>
-                            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-                              Место: {part.location || 'не указано'}
-                            </span>
                           </td>
                           {/* Inline Цена */}
                           <td>
@@ -702,10 +692,7 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="part-card-row">
-                      <span className="part-card-label">Место:</span>
-                      <span className="part-card-value">{part.location || 'не указано'}</span>
-                    </div>
+
 
                     <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
                       <button
@@ -804,17 +791,7 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Место на складе</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '16px' }}
-                  placeholder="Например: Стеллаж А, Полка 3"
-                  value={newLocation}
-                  onChange={(e) => setNewLocation(e.target.value)}
-                />
-              </div>
+
 
               <div className="input-group">
                 <label className="input-label" style={{ fontSize: '16px' }}>Описание / Применяемость</label>
@@ -922,15 +899,7 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="input-group">
-                <label className="input-label">Место на складе</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={editLocation}
-                  onChange={(e) => setEditLocation(e.target.value)}
-                />
-              </div>
+
 
               <div className="input-group">
                 <label className="input-label">Описание / Применяемость</label>
