@@ -605,6 +605,15 @@ export default function AdminDashboardPage() {
                           <td>
                             <div style={{ display: 'flex', gap: '5px' }}>
                               <button
+                                onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
+                                className="btn btn-sm"
+                                style={{ minHeight: 'auto', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                                disabled={part.quantity <= 0}
+                                title="Списать 1 штуку"
+                              >
+                                Списать 1
+                              </button>
+                              <button
                                 onClick={() => openEditModal(part)}
                                 className="btn btn-sm btn-secondary"
                                 style={{ minHeight: 'auto' }}
@@ -694,13 +703,21 @@ export default function AdminDashboardPage() {
 
 
 
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
+                        className="btn btn-sm"
+                        style={{ flexGrow: 1, minHeight: '40px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                        disabled={part.quantity <= 0}
+                      >
+                        Списать 1 шт.
+                      </button>
                       <button
                         onClick={() => openEditModal(part)}
                         className="btn btn-sm btn-secondary"
                         style={{ flexGrow: 1, minHeight: '40px' }}
                       >
-                        Редактировать всё
+                        Изменить
                       </button>
                       <button
                         onClick={() => handleDeletePart(part.id, part.name)}

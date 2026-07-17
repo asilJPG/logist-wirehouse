@@ -20,6 +20,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
+  const [shareCopied, setShareCopied] = useState<string | null>(null);
 
   // Функция для загрузки запчастей
   const fetchParts = async (query = '') => {
@@ -53,15 +54,52 @@ export default function HomePage() {
     }
   };
 
-  // Первоначальная загрузка данных при монтировании
+  // Первоначальная загрузка данных при монтировании и проверка URL
   useEffect(() => {
     fetchParts(searchQuery);
+
+    // Проверяем параметр 'part' в ссылке
+    const params = new URLSearchParams(window.location.search);
+    const partId = params.get('part');
+    if (partId) {
+      const fetchSinglePart = async () => {
+        try {
+          const { data, error: singleError } = await supabase
+            .from('parts')
+            .select('*')
+            .eq('id', partId)
+            .single();
+          
+          if (!singleError && data) {
+            setSelectedPart(data as Part);
+          }
+        } catch (err) {
+          console.error('Ошибка загрузки детали по ссылке:', err);
+        }
+      };
+      fetchSinglePart();
+    }
   }, []);
 
   // Обработчик отправки формы поиска
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchParts(searchQuery);
+  };
+
+  // Копирование ссылки на деталь в буфер обмена
+  const handleShare = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Отключаем открытие карточки при клике на иконку поделиться
+    const shareUrl = `${window.location.origin}/?part=${id}`;
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => {
+        setShareCopied(id);
+        setTimeout(() => setShareCopied(null), 2000);
+      })
+      .catch((err) => {
+        console.error('Ошибка при копировании ссылки:', err);
+      });
   };
 
   // Форматирование цены
@@ -155,13 +193,21 @@ export default function HomePage() {
                   <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--primary)' }}>
                     {formatPrice(part.price)}
                   </span>
-                  <span>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ minHeight: '30px', padding: '4px 8px', fontSize: '13px' }}
+                      title="Скопировать ссылку"
+                      onClick={(e) => handleShare(e, part.id)}
+                    >
+                      {shareCopied === part.id ? '✓' : '🔗'}
+                    </button>
                     {part.quantity > 0 ? (
                       <span className="status-badge status-in-stock">{part.quantity} шт.</span>
                     ) : (
                       <span className="status-badge status-out-of-stock">Нет</span>
                     )}
-                  </span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -239,10 +285,18 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: '30px', fontWeight: 'bold', color: 'var(--primary)' }}>
                     {formatPrice(selectedPart.price)}
                   </div>
+                  
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ minHeight: '38px', padding: '8px 16px', fontSize: '14px' }}
+                    onClick={(e) => handleShare(e, selectedPart.id)}
+                  >
+                    {shareCopied === selectedPart.id ? '✓ Ссылка скопирована' : '🔗 Поделиться карточкой'}
+                  </button>
                 </div>
               </div>
             </div>
