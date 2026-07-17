@@ -32,6 +32,8 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_parts_updated_at ON public.parts;
+
 CREATE TRIGGER update_parts_updated_at
     BEFORE UPDATE ON public.parts
     FOR EACH ROW
