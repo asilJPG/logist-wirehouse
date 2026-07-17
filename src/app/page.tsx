@@ -123,7 +123,7 @@ export default function HomePage() {
           <input
             type="text"
             className="input-field search-input"
-            placeholder="Поиск по названию, артикулу или бренду (Bosch, OP570, фильтр...)"
+            placeholder="Поиск по названию, артикулу или бренду"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ width: '100%', fontSize: '18px', padding: '12px 18px', borderRadius: '8px' }}

@@ -1034,7 +1034,7 @@ export default function AdminDashboardPage() {
                     type="text"
                     className="input-field"
                     style={{ padding: '8px 12px', fontSize: '16px' }}
-                    placeholder="Пусто для автогенерации (например: ART-H39K1L)"
+                    placeholder="Оставьте пустым для автогенерации"
                     value={newArticle}
                     onChange={(e) => setNewArticle(e.target.value)}
                   />
@@ -1046,7 +1046,7 @@ export default function AdminDashboardPage() {
                     type="text"
                     className="input-field"
                     style={{ padding: '8px 12px', fontSize: '16px' }}
-                    placeholder="Например: Filtron"
+                    placeholder="Бренд"
                     value={newBrand}
                     onChange={(e) => setNewBrand(e.target.value)}
                     required
@@ -1059,7 +1059,7 @@ export default function AdminDashboardPage() {
                     type="text"
                     className="input-field"
                     style={{ padding: '8px 12px', fontSize: '16px' }}
-                    placeholder="Например: Фильтр масляный"
+                    placeholder="Название детали"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     required
@@ -1098,7 +1098,7 @@ export default function AdminDashboardPage() {
                   <textarea
                     className="input-field"
                     style={{ padding: '8px 12px', fontSize: '16px', minHeight: '80px', fontFamily: 'inherit' }}
-                    placeholder="Например: Подходит для Ford Focus 2, 1.6"
+                    placeholder="Применяемость, описание или характеристики"
                     value={newDescription}
                     onChange={(e) => setNewDescription(e.target.value)}
                   />
@@ -1374,7 +1374,7 @@ export default function AdminDashboardPage() {
                 <label className="input-label">Причина / На что списано</label>
                 <textarea
                   className="input-field"
-                  placeholder="Например: Установлено на Ford Focus A001AA, продано клиенту..."
+                  placeholder="На что списана запчасть (автомобиль, причина)"
                   style={{ minHeight: '80px', fontFamily: 'inherit', padding: '8px 12px' }}
                   value={writeOffComment}
                   onChange={(e) => setWriteOffComment(e.target.value)}
@@ -1445,7 +1445,7 @@ export default function AdminDashboardPage() {
                   <input
                     type="text"
                     className="input-field"
-                    placeholder="Например: Иван"
+                    placeholder="Имя"
                     value={newAdminUsername}
                     onChange={(e) => setNewAdminUsername(e.target.value)}
                     required
