@@ -102,9 +102,10 @@ export default function HomePage() {
       });
   };
 
-  // Форматирование цены
+  // Форматирование цены (в сумы)
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0 }).format(price);
+    const formatted = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0 }).format(price);
+    return `${formatted} сум`;
   };
 
   return (

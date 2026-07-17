@@ -397,10 +397,20 @@ export default function AdminDashboardPage() {
         imageUrl = await uploadImage(newImageFile);
       }
 
+      let finalArticle = newArticle.trim();
+      if (!finalArticle) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let autoArt = 'ART-';
+        for (let i = 0; i < 6; i++) {
+          autoArt += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        finalArticle = autoArt;
+      }
+
       const { error: insertError } = await supabase.from('parts').insert([
         {
           name: newName.trim(),
-          article: newArticle.trim(),
+          article: finalArticle,
           brand: newBrand.trim(),
           price: priceNum,
           quantity: qtyNum,
@@ -534,7 +544,7 @@ export default function AdminDashboardPage() {
 
       // Обновляем локальное состояние, чтобы отобразить сохраненное значение
       setParts(parts.map((p) => (p.id === id ? { ...p, price: priceNum } : p)));
-      alert(`Цена для "${name}" обновлена на ${priceNum} руб.`);
+      alert(`Цена для "${name}" обновлена на ${priceNum} сум.`);
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения цены:', err);
       alert(`Ошибка обновления цены: ${err.message}`);
@@ -651,8 +661,8 @@ export default function AdminDashboardPage() {
                     <tr>
                       <th style={{ width: '70px' }}>Фото</th>
                       <th>Артикул / Бренд</th>
-                      <th>Название / Место</th>
-                      <th>Цена (руб.)</th>
+                      <th>Название</th>
+                      <th>Цена (сум)</th>
                       <th>Количество</th>
                       <th>Действия</th>
                     </tr>
@@ -794,7 +804,7 @@ export default function AdminDashboardPage() {
                     
                     {/* Inline цена для мобильных */}
                     <div className="part-card-row" style={{ alignItems: 'center' }}>
-                      <span className="part-card-label">Цена (руб.):</span>
+                      <span className="part-card-label">Цена (сум):</span>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
                         <input
                           type="number"
@@ -880,15 +890,14 @@ export default function AdminDashboardPage() {
             
             <form onSubmit={handleAddPart}>
               <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Артикул (номер детали) *</label>
+                <label className="input-label" style={{ fontSize: '16px' }}>Артикул (номер детали)</label>
                 <input
                   type="text"
                   className="input-field"
                   style={{ padding: '8px 12px', fontSize: '16px' }}
-                  placeholder="Например: OP570T"
+                  placeholder="Пусто для автогенерации (например: ART-H39K1L)"
                   value={newArticle}
                   onChange={(e) => setNewArticle(e.target.value)}
-                  required
                 />
               </div>
 
@@ -920,7 +929,7 @@ export default function AdminDashboardPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div className="input-group">
-                  <label className="input-label" style={{ fontSize: '16px' }}>Цена (руб.) *</label>
+                  <label className="input-label" style={{ fontSize: '16px' }}>Цена (сум) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1036,7 +1045,7 @@ export default function AdminDashboardPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div className="input-group">
-                  <label className="input-label">Цена (руб.) *</label>
+                  <label className="input-label">Цена (сум) *</label>
                   <input
                     type="number"
                     step="0.01"
