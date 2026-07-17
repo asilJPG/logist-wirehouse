@@ -46,6 +46,17 @@ export default function AdminDashboardPage() {
   const [newDescription, setNewDescription] = useState('');
   const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [addingPart, setAddingPart] = useState(false);
+  
+  // Состояния для обрезки фото
+  const [showCropModal, setShowCropModal] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<'new' | 'edit'>('new');
+  const [cropZoom, setCropZoom] = useState(1.0);
+  const [cropDrag, setCropDrag] = useState({ x: 0, y: 0 });
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imageNaturalSize, setImageNaturalSize] = useState({ w: 0, h: 0 });
+  const [newImagePreviewUrl, setNewImagePreviewUrl] = useState<string | null>(null);
 
   // Состояние для редактирования товара в модальном окне
   const [editingPart, setEditingPart] = useState<Part | null>(null);
@@ -142,6 +153,131 @@ export default function AdminDashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem('admin_username');
     router.replace('/');
+  };
+
+  // Обработка выбора файла для обрезки
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'new' | 'edit') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropImageSrc(reader.result as string);
+      setCropTarget(target);
+      setCropZoom(1.0);
+      setCropDrag({ x: 0, y: 0 });
+      setShowCropModal(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageLoaded = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDraggingCrop(true);
+    setDragStart({ x: e.clientX - cropDrag.x, y: e.clientY - cropDrag.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingCrop) return;
+    setCropDrag({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDraggingCrop(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsDraggingCrop(true);
+      setDragStart({
+        x: e.touches[0].clientX - cropDrag.x,
+        y: e.touches[0].clientY - cropDrag.y
+      });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDraggingCrop || e.touches.length !== 1) return;
+    setCropDrag({
+      x: e.touches[0].clientX - dragStart.x,
+      y: e.touches[0].clientY - dragStart.y
+    });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDraggingCrop(false);
+  };
+
+  const handleApplyCrop = () => {
+    if (!cropImageSrc || imageNaturalSize.w === 0) return;
+
+    const img = new Image();
+    img.src = cropImageSrc;
+    img.onload = () => {
+      const containerW = 360;
+      const containerH = 270;
+      const cutoutW = 320;
+      const cutoutH = 240;
+      const cutoutX = (containerW - cutoutW) / 2;
+      const cutoutY = (containerH - cutoutH) / 2;
+
+      const displayScale = Math.min(containerW / imageNaturalSize.w, containerH / imageNaturalSize.h);
+      const renderedW = imageNaturalSize.w * displayScale;
+      const renderedH = imageNaturalSize.h * displayScale;
+
+      const centerX = containerW / 2;
+      const centerY = containerH / 2;
+
+      const left = centerX - (renderedW * cropZoom) / 2 + cropDrag.x;
+      const top = centerY - (renderedH * cropZoom) / 2 + cropDrag.y;
+
+      const relativeX = cutoutX - left;
+      const relativeY = cutoutY - top;
+
+      const scaleFactor = imageNaturalSize.w / (renderedW * cropZoom);
+
+      const srcX = relativeX * scaleFactor;
+      const srcY = relativeY * scaleFactor;
+      const srcW = cutoutW * scaleFactor;
+      const srcH = cutoutH * scaleFactor;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = cutoutW * 2;
+      canvas.height = cutoutH * 2;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          img,
+          srcX, srcY, srcW, srcH,
+          0, 0, canvas.width, canvas.height
+        );
+      }
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const croppedFile = new File([blob], 'part_photo_cropped.jpg', { type: 'image/jpeg' });
+          const previewUrl = URL.createObjectURL(blob);
+          
+          if (cropTarget === 'new') {
+            setNewImageFile(croppedFile);
+            setNewImagePreviewUrl(previewUrl);
+          } else {
+            setEditImageFile(croppedFile);
+            setEditImageUrl(previewUrl);
+          }
+        }
+        setShowCropModal(false);
+      }, 'image/jpeg', 0.85);
+    };
   };
 
   // Загрузка изображения в Supabase Storage
@@ -286,6 +422,7 @@ export default function AdminDashboardPage() {
       setNewQuantity('0');
       setNewDescription('');
       setNewImageFile(null);
+      setNewImagePreviewUrl(null);
       
       // Сброс input-файла
       const fileInput = document.getElementById('new-part-image') as HTMLInputElement;
@@ -823,13 +960,19 @@ export default function AdminDashboardPage() {
 
               <div className="input-group">
                 <label className="input-label" style={{ fontSize: '16px' }}>Фотография запчасти</label>
+                {newImagePreviewUrl && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Выбранная область (4:3):</p>
+                    <img src={newImagePreviewUrl} alt="Выбранная область" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                  </div>
+                )}
                 <input
                   id="new-part-image"
                   type="file"
                   accept="image/*"
                   className="input-field"
                   style={{ padding: '8px 12px', fontSize: '15px' }}
-                  onChange={(e) => setNewImageFile(e.target.files?.[0] || null)}
+                  onChange={(e) => handleFileSelect(e, 'new')}
                 />
               </div>
 
@@ -933,8 +1076,8 @@ export default function AdminDashboardPage() {
                 <label className="input-label">Фотография запчасти</label>
                 {editImageUrl && (
                   <div style={{ marginBottom: '10px' }}>
-                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Текущее фото:</p>
-                    <img src={editImageUrl} alt="Текущее фото" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Текущее фото / Область (4:3):</p>
+                    <img src={editImageUrl} alt="Текущее фото" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
                   </div>
                 )}
                 <input
@@ -942,7 +1085,7 @@ export default function AdminDashboardPage() {
                   accept="image/*"
                   className="input-field"
                   style={{ padding: '8px 12px', fontSize: '15px' }}
-                  onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                  onChange={(e) => handleFileSelect(e, 'edit')}
                 />
               </div>
 
@@ -1053,7 +1196,117 @@ export default function AdminDashboardPage() {
             </form>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
+        )}
+
+        {/* Модальное окно для обрезки фотографии */}
+        {showCropModal && cropImageSrc && (
+          <div className="modal-overlay" style={{ zIndex: 2000 }}>
+            <div className="modal-content" style={{ maxWidth: '400px', padding: '20px' }}>
+              <div className="modal-header">
+                <span className="modal-title">Выбор области фото (4:3)</span>
+                <button onClick={() => setShowCropModal(false)} className="modal-close">
+                  &times;
+                </button>
+              </div>
+              
+              <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '15px' }}>
+                Перетаскивайте фото мышкой/пальцем и увеличивайте ползунком снизу, чтобы выбрать нужную область для карточки.
+              </p>
+
+              {/* Контейнер обрезки */}
+              <div
+                style={{
+                  width: '360px',
+                  height: '270px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  cursor: 'move',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  backgroundColor: '#000000',
+                  margin: '0 auto 15px auto',
+                  userSelect: 'none',
+                }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                <img
+                  src={cropImageSrc}
+                  alt="Crop preview"
+                  onLoad={handleImageLoaded}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: `translate(-50%, -50%) translate(${cropDrag.x}px, ${cropDrag.y}px) scale(${cropZoom})`,
+                    transformOrigin: 'center center',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                    pointerEvents: 'none',
+                  }}
+                />
+                
+                {/* Рамка обрезки в центре: 320x240 */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '15px',
+                    left: '20px',
+                    width: '320px',
+                    height: '240px',
+                    border: '2px dashed #ffffff',
+                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
+                    pointerEvents: 'none',
+                    borderRadius: '4px',
+                  }}
+                />
+              </div>
+
+              {/* Зум ползунок */}
+              <div className="input-group" style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '14px' }}>
+                  <span className="input-label" style={{ margin: 0 }}>Увеличение</span>
+                  <span style={{ fontWeight: 'bold' }}>{Math.round(cropZoom * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="3.0"
+                  step="0.05"
+                  value={cropZoom}
+                  onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Кнопки */}
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowCropModal(false)}
+                  className="btn btn-secondary"
+                  style={{ minHeight: '40px' }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyCrop}
+                  className="btn btn-primary"
+                  style={{ minHeight: '40px' }}
+                >
+                  Готово
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
