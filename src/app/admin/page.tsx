@@ -1359,13 +1359,13 @@ export default function AdminDashboardPage() {
                 </div>
                 
                 <div className="input-group">
-                  <label className="input-label">Кто списал *</label>
+                  <label className="input-label">Кто списал</label>
                   <input
                     type="text"
                     className="input-field"
                     value={writeOffBy}
-                    onChange={(e) => setWriteOffBy(e.target.value)}
-                    required
+                    disabled
+                    style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
                   />
                 </div>
               </div>
