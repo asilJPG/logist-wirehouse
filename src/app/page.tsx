@@ -240,17 +240,9 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '30px', fontWeight: 'bold', color: 'var(--primary)', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '30px', fontWeight: 'bold', color: 'var(--primary)' }}>
                     {formatPrice(selectedPart.price)}
                   </div>
-
-                  <button
-                    className="btn btn-secondary"
-                    style={{ width: '100%', minHeight: '44px' }}
-                    onClick={() => setSelectedPart(null)}
-                  >
-                    Закрыть окно
-                  </button>
                 </div>
               </div>
             </div>
