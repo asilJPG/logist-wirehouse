@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
         .eq('password', enteredPassword);
 
       if (dbError) {
-        throw new Error(`Ошибка подключения к базе данных: ${dbError.message}`);
+        throw new Error('Не удалось подключиться к серверу. Пожалуйста, проверьте интернет.');
       }
 
       if (!adminsData || adminsData.length === 0) {
@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
       router.push('/admin');
     } catch (err: any) {
       console.error('Ошибка входа:', err);
-      setError(err.message || 'Произошла непредвиденная ошибка при входе.');
+      setError('Не удалось войти. Проверьте пароль или подключение к интернету.');
     } finally {
       setSigningIn(false);
     }

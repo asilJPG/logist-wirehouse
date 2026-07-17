@@ -139,7 +139,7 @@ export default function AdminDashboardPage() {
       setTempQuantities(quantities);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
-      setError(`Ошибка базы данных: ${err.message}`);
+      setError('Не удалось загрузить данные со склада. Проверьте интернет-соединение.');
     } finally {
       setPartsLoading(false);
     }
@@ -307,7 +307,7 @@ export default function AdminDashboardPage() {
       return urlData.publicUrl;
     } catch (err: any) {
       console.error('Ошибка загрузки файла в хранилище:', err);
-      alert(`Не удалось загрузить фотографию: ${err.message}. Убедитесь, что бакет "part-images" создан в Storage в Supabase и разрешены анонимные загрузки (policies).`);
+      alert('Не удалось сохранить фотографию. Пожалуйста, проверьте соединение с интернетом или настройки хранилища.');
       return null;
     }
   };
@@ -442,7 +442,7 @@ export default function AdminDashboardPage() {
       fetchParts(searchQuery);
     } catch (err: any) {
       console.error('Ошибка добавления детали:', err);
-      setError(`Не удалось добавить деталь: ${err.message}`);
+      setError('Не удалось добавить деталь на склад. Пожалуйста, проверьте введённые данные или интернет-соединение.');
     } finally {
       setAddingPart(false);
     }
@@ -516,7 +516,7 @@ export default function AdminDashboardPage() {
       fetchParts(searchQuery);
     } catch (err: any) {
       console.error('Ошибка обновления детали:', err);
-      setError(`Не удалось обновить деталь: ${err.message}`);
+      setError('Не удалось сохранить изменения. Пожалуйста, проверьте введённые данные или интернет-соединение.');
     } finally {
       setSavingEdit(false);
     }
@@ -547,7 +547,7 @@ export default function AdminDashboardPage() {
       alert(`Цена для "${name}" обновлена на ${priceNum} сум.`);
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения цены:', err);
-      alert(`Ошибка обновления цены: ${err.message}`);
+      alert('Не удалось обновить цену. Пожалуйста, проверьте интернет-соединение.');
     }
   };
 
@@ -573,7 +573,7 @@ export default function AdminDashboardPage() {
       setTempQuantities({ ...tempQuantities, [id]: quantity.toString() });
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения количества:', err);
-      alert(`Ошибка обновления количества: ${err.message}`);
+      alert('Не удалось обновить количество товара. Пожалуйста, проверьте интернет-соединение.');
     }
   };
 
@@ -597,7 +597,7 @@ export default function AdminDashboardPage() {
       fetchParts(searchQuery);
     } catch (err: any) {
       console.error('Ошибка удаления детали:', err);
-      setError(`Не удалось удалить деталь: ${err.message}`);
+      setError('Не удалось удалить деталь со склада. Проверьте подключение к интернету.');
     }
   };
 

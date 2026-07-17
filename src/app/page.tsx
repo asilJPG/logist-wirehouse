@@ -22,24 +22,17 @@ export default function HomePage() {
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
 
-  // Функция для загрузки запчастей
-  const fetchParts = async (query = '') => {
+  // Функция для загрузки всех запчастей со склада
+  const fetchParts = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      let queryBuilder = supabase.from('parts').select('*');
-
-      // Фильтр по поисковому запросу
-      if (query.trim()) {
-        const q = `%${query.trim()}%`;
-        queryBuilder = queryBuilder.or(`name.ilike.${q},article.ilike.${q},brand.ilike.${q},description.ilike.${q}`);
-      }
-
-      // Сортировка по названию
-      queryBuilder = queryBuilder.order('name', { ascending: true });
-
-      const { data, error: fetchError } = await queryBuilder;
+      // Загружаем все запчасти за один раз для быстрого локального поиска
+      const { data, error: fetchError } = await supabase
+        .from('parts')
+        .select('*')
+        .order('name', { ascending: true });
 
       if (fetchError) {
         throw fetchError;
@@ -47,16 +40,17 @@ export default function HomePage() {
 
       setParts(data || []);
     } catch (err: any) {
-      console.error('Ошибка при загрузке данных:', err);
-      setError('Не удалось загрузить список запчастей. Убедитесь, что настроены переменные окружения Supabase.');
+      console.error('Ошибка загрузки данных:', err);
+      // Пользовательская ошибка без упоминания Supabase/БД
+      setError('Не удалось загрузить список запчастей. Проверьте интернет-соединение или обновите страницу.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Первоначальная загрузка данных при монтировании и проверка URL
+  // Загрузка данных при монтировании и проверка ссылки
   useEffect(() => {
-    fetchParts(searchQuery);
+    fetchParts();
 
     // Проверяем параметр 'part' в ссылке
     const params = new URLSearchParams(window.location.search);
@@ -81,15 +75,9 @@ export default function HomePage() {
     }
   }, []);
 
-  // Обработчик отправки формы поиска
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchParts(searchQuery);
-  };
-
   // Копирование ссылки на деталь в буфер обмена
   const handleShare = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Отключаем открытие карточки при клике на иконку поделиться
+    e.stopPropagation();
     const shareUrl = `${window.location.origin}/?part=${id}`;
     navigator.clipboard
       .writeText(shareUrl)
@@ -108,29 +96,39 @@ export default function HomePage() {
     return `${formatted} сум`;
   };
 
+  // Мгновенная фильтрация списка запчастей на клиенте по мере ввода
+  const filteredParts = parts.filter((part) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      part.name.toLowerCase().includes(q) ||
+      part.article.toLowerCase().includes(q) ||
+      part.brand.toLowerCase().includes(q) ||
+      (part.description && part.description.toLowerCase().includes(q))
+    );
+  });
+
   return (
     <div>
       <div style={{ marginBottom: '25px', textAlign: 'center' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Наличие запчастей на складе</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '18px' }}>
-          Введите название детали, артикул (номер) или производителя, чтобы проверить наличие.
+          Введите название детали, артикул (номер) или производителя — список обновится мгновенно.
         </p>
       </div>
 
-      {/* Панель поиска */}
-      <div className="search-container">
-        <form onSubmit={handleSearchSubmit} className="search-box">
+      {/* Панель поиска без кнопки */}
+      <div className="search-container" style={{ padding: '15px 20px', marginBottom: '25px' }}>
+        <div className="search-box">
           <input
             type="text"
             className="input-field search-input"
-            placeholder="Например: Фильтр масляный, OP570, Bosch..."
+            placeholder="Поиск по названию, артикулу или бренду (Bosch, OP570, фильтр...)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: '100%', fontSize: '18px', padding: '12px 18px', borderRadius: '8px' }}
           />
-          <button type="submit" className="btn btn-primary search-btn">
-            Найти
-          </button>
-        </form>
+        </div>
       </div>
 
       {/* Сообщения об ошибках или статусе загрузки */}
@@ -138,32 +136,20 @@ export default function HomePage() {
 
       {loading ? (
         <div className="loading-spinner">Загрузка данных со склада...</div>
-      ) : parts.length === 0 ? (
-        <div className="no-results">
-          <p style={{ fontWeight: 'bold', fontSize: '20px', marginBottom: '10px' }}>Ничего не найдено</p>
-          <p>Попробуйте ввести другое название или артикул.</p>
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                fetchParts('');
-              }}
-              className="btn btn-secondary btn-sm"
-              style={{ marginTop: '15px' }}
-            >
-              Сбросить поиск
-            </button>
-          )}
+      ) : filteredParts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: '20px', fontWeight: 'bold', marginBottom: '5px' }}>Товары не найдены</p>
+          <p style={{ fontSize: '15px' }}>Попробуйте ввести другой артикул или название детали.</p>
         </div>
       ) : (
         <>
-          <p style={{ marginBottom: '10px', color: 'var(--text-muted)' }}>
-            Найдено позиций: <strong>{parts.length}</strong>
+          <p style={{ marginBottom: '15px', color: 'var(--text-muted)', fontSize: '15px' }}>
+            Найдено позиций: <strong>{filteredParts.length}</strong>
           </p>
 
           {/* Сетка карточек запчастей */}
           <div className="parts-grid">
-            {parts.map((part) => (
+            {filteredParts.map((part) => (
               <div
                 key={part.id}
                 className="part-card part-card-clickable"
