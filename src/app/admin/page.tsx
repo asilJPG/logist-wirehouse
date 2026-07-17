@@ -1421,9 +1421,11 @@ export default function AdminDashboardPage() {
                   <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--card-bg)', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', flexGrow: 1, justifyContent: 'space-between', alignItems: 'center', marginRight: '10px' }}>
                       <strong style={{ fontSize: '15px' }}>{adm.username}</strong>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>Пароль: {adm.password}</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                        Пароль: {adminName === 'Администратор' ? adm.password : '••••••'}
+                      </span>
                     </div>
-                    {adm.username !== 'Администратор' && adm.username !== adminName && (
+                    {adminName === 'Администратор' && adm.username !== 'Администратор' && adm.username !== adminName && (
                       <button
                         onClick={() => handleDeleteAdmin(adm.id, adm.username)}
                         className="btn btn-sm btn-danger"
@@ -1437,52 +1439,63 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            <form onSubmit={handleAddAdmin} style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-              <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '15px' }}>Добавить сотрудника</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="input-group">
-                  <label className="input-label">Имя сотрудника *</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="Имя"
-                    value={newAdminUsername}
-                    onChange={(e) => setNewAdminUsername(e.target.value)}
-                    required
-                  />
+            {adminName === 'Администратор' ? (
+              <form onSubmit={handleAddAdmin} style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '15px' }}>Добавить сотрудника</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div className="input-group">
+                    <label className="input-label">Имя сотрудника *</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Имя"
+                      value={newAdminUsername}
+                      onChange={(e) => setNewAdminUsername(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Пароль для входа *</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="Пароль"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="input-group">
-                  <label className="input-label">Пароль для входа *</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    placeholder="Пароль"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
 
-              <div className="modal-actions" style={{ marginTop: '10px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAdminsModal(false)}
-                  className="btn btn-secondary"
-                  style={{ minHeight: '38px', padding: '6px 16px' }}
-                >
-                  Закрыть
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-success"
-                  style={{ minHeight: '38px', padding: '6px 16px' }}
-                  disabled={addingAdmin}
-                >
-                  {addingAdmin ? 'Добавление...' : 'Добавить'}
-                </button>
+                <div className="modal-actions" style={{ marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminsModal(false)}
+                    className="btn btn-secondary"
+                    style={{ minHeight: '38px', padding: '6px 16px' }}
+                  >
+                    Закрыть
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-success"
+                    style={{ minHeight: '38px', padding: '6px 16px' }}
+                    disabled={addingAdmin}
+                  >
+                    {addingAdmin ? 'Добавление...' : 'Добавить'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
+                Добавлять сотрудников и просматривать пароли может только Администратор.
+                <div style={{ marginTop: '15px' }}>
+                  <button type="button" onClick={() => setShowAdminsModal(false)} className="btn btn-secondary btn-sm" style={{ padding: '8px 20px' }}>
+                    Закрыть
+                  </button>
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
