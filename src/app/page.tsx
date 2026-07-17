@@ -12,6 +12,7 @@ interface Part {
   price: number;
   location: string | null;
   description: string | null;
+  image_url: string | null;
 }
 
 export default function HomePage() {
@@ -19,6 +20,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [activeImage, setActiveImage] = useState<string | null>(null);
 
   // Функция для загрузки запчастей
   const fetchParts = async (query = '') => {
@@ -126,6 +128,7 @@ export default function HomePage() {
             <table className="parts-table">
               <thead>
                 <tr>
+                  <th style={{ width: '80px' }}>Фото</th>
                   <th>Артикул</th>
                   <th>Бренд</th>
                   <th>Название</th>
@@ -138,6 +141,40 @@ export default function HomePage() {
               <tbody>
                 {parts.map((part) => (
                   <tr key={part.id}>
+                    <td>
+                      {part.image_url ? (
+                        <img
+                          src={part.image_url}
+                          alt={part.name}
+                          style={{
+                            width: '50px',
+                            height: '50px',
+                            objectFit: 'cover',
+                            borderRadius: '6px',
+                            cursor: 'zoom-in',
+                            border: '1px solid var(--border)',
+                          }}
+                          onClick={() => setActiveImage(part.image_url)}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: '50px',
+                            height: '50px',
+                            backgroundColor: 'rgba(0,0,0,0.02)',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '16px',
+                            color: 'var(--text-muted)',
+                            border: '1px dashed var(--border)',
+                          }}
+                        >
+                          📷
+                        </div>
+                      )}
+                    </td>
                     <td style={{ fontWeight: 'bold', fontFamily: 'monospace', fontSize: '19px' }}>{part.article}</td>
                     <td>{part.brand}</td>
                     <td style={{ fontWeight: '600' }}>{part.name}</td>
@@ -161,6 +198,25 @@ export default function HomePage() {
           <div className="parts-cards">
             {parts.map((part) => (
               <div key={part.id} className="part-card">
+                {part.image_url && (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '180px',
+                      marginBottom: '12px',
+                      overflow: 'hidden',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <img
+                      src={part.image_url}
+                      alt={part.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'zoom-in' }}
+                      onClick={() => setActiveImage(part.image_url)}
+                    />
+                  </div>
+                )}
                 <div className="part-card-title">{part.name}</div>
                 <div className="part-card-row">
                   <span className="part-card-label">Артикул:</span>
@@ -193,7 +249,15 @@ export default function HomePage() {
                   <span className="part-card-value">{part.location || '—'}</span>
                 </div>
                 {part.description && (
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--border)', fontSize: '15px', color: 'var(--text-muted)' }}>
+                  <div
+                    style={{
+                      marginTop: '10px',
+                      paddingTop: '10px',
+                      borderTop: '1px solid var(--border)',
+                      fontSize: '15px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
                     {part.description}
                   </div>
                 )}
@@ -201,6 +265,54 @@ export default function HomePage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Модальное окно просмотра изображения во весь экран */}
+      {activeImage && (
+        <div
+          className="modal-overlay"
+          onClick={() => setActiveImage(null)}
+          style={{ cursor: 'zoom-out', backgroundColor: 'rgba(0, 0, 0, 0.75)' }}
+        >
+          <div
+            style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={activeImage}
+              alt="Изображение во весь экран"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '85vh',
+                borderRadius: '12px',
+                border: '3px solid white',
+                boxShadow: 'var(--shadow-lg)',
+              }}
+            />
+            <button
+              onClick={() => setActiveImage(null)}
+              style={{
+                position: 'absolute',
+                top: '-20px',
+                right: '-20px',
+                background: 'var(--danger)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                fontSize: '24px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: 'var(--shadow-md)',
+              }}
+            >
+              &times;
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

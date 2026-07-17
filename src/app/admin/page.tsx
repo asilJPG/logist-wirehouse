@@ -13,6 +13,7 @@ interface Part {
   price: number;
   location: string | null;
   description: string | null;
+  image_url: string | null;
 }
 
 interface AdminUser {
@@ -45,6 +46,7 @@ export default function AdminDashboardPage() {
   const [newQuantity, setNewQuantity] = useState('0');
   const [newLocation, setNewLocation] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newImageFile, setNewImageFile] = useState<File | null>(null);
   const [addingPart, setAddingPart] = useState(false);
 
   // Состояние для редактирования товара в модальном окне
@@ -56,6 +58,8 @@ export default function AdminDashboardPage() {
   const [editQuantity, setEditQuantity] = useState('0');
   const [editLocation, setEditLocation] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState<string | null>(null);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Состояния для быстрого inline-редактирования
@@ -143,6 +147,38 @@ export default function AdminDashboardPage() {
     router.replace('/');
   };
 
+  // Загрузка изображения в Supabase Storage
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      // Генерируем уникальное имя файла
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const filePath = `parts/${fileName}`;
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('part-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      // Получаем публичную ссылку
+      const { data: urlData } = supabase.storage
+        .from('part-images')
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (err: any) {
+      console.error('Ошибка загрузки файла в хранилище:', err);
+      alert(`Не удалось загрузить фотографию: ${err.message}. Убедитесь, что бакет "part-images" создан в Storage в Supabase и разрешены анонимные загрузки (policies).`);
+      return null;
+    }
+  };
+
   // Добавление нового сотрудника
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,6 +259,11 @@ export default function AdminDashboardPage() {
     }
 
     try {
+      let imageUrl: string | null = null;
+      if (newImageFile) {
+        imageUrl = await uploadImage(newImageFile);
+      }
+
       const { error: insertError } = await supabase.from('parts').insert([
         {
           name: newName.trim(),
@@ -232,6 +273,7 @@ export default function AdminDashboardPage() {
           quantity: qtyNum,
           location: newLocation.trim() || null,
           description: newDescription.trim() || null,
+          image_url: imageUrl,
         },
       ]);
 
@@ -248,6 +290,11 @@ export default function AdminDashboardPage() {
       setNewQuantity('0');
       setNewLocation('');
       setNewDescription('');
+      setNewImageFile(null);
+      
+      // Сброс input-файла
+      const fileInput = document.getElementById('new-part-image') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
 
       // Перезагрузка списка деталей
       fetchParts(searchQuery);
@@ -269,6 +316,8 @@ export default function AdminDashboardPage() {
     setEditQuantity(part.quantity.toString());
     setEditLocation(part.location || '');
     setEditDescription(part.description || '');
+    setEditImageUrl(part.image_url);
+    setEditImageFile(null);
   };
 
   // Сохранение изменений из модального окна
@@ -296,6 +345,14 @@ export default function AdminDashboardPage() {
     }
 
     try {
+      let finalImageUrl = editImageUrl;
+      if (editImageFile) {
+        const uploadedUrl = await uploadImage(editImageFile);
+        if (uploadedUrl) {
+          finalImageUrl = uploadedUrl;
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('parts')
         .update({
@@ -306,6 +363,7 @@ export default function AdminDashboardPage() {
           quantity: qtyNum,
           location: editLocation.trim() || null,
           description: editDescription.trim() || null,
+          image_url: finalImageUrl,
         })
         .eq('id', editingPart.id);
 
@@ -461,6 +519,7 @@ export default function AdminDashboardPage() {
                 <table className="parts-table" style={{ fontSize: '16px' }}>
                   <thead>
                     <tr>
+                      <th style={{ width: '70px' }}>Фото</th>
                       <th>Артикул / Бренд</th>
                       <th>Название / Место</th>
                       <th>Цена (руб.)</th>
@@ -474,6 +533,20 @@ export default function AdminDashboardPage() {
 
                       return (
                         <tr key={part.id}>
+                          {/* Изображение детали */}
+                          <td>
+                            {part.image_url ? (
+                              <img
+                                src={part.image_url}
+                                alt={part.name}
+                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border)' }}
+                              />
+                            ) : (
+                              <div style={{ width: '40px', height: '40px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: 'var(--text-muted)', border: '1px dashed var(--border)' }}>
+                                📷
+                              </div>
+                            )}
+                          </td>
                           {/* Артикул и Бренд */}
                           <td>
                             <strong style={{ fontFamily: 'monospace', fontSize: '18px', display: 'block' }}>{part.article}</strong>
@@ -568,6 +641,11 @@ export default function AdminDashboardPage() {
               <div className="parts-cards">
                 {parts.map((part) => (
                   <div key={part.id} className="part-card">
+                    {part.image_url && (
+                      <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '12px' }}>
+                        <img src={part.image_url} alt={part.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    )}
                     <div className="part-card-title">{part.name}</div>
                     <div className="part-card-row">
                       <span className="part-card-label">Артикул:</span>
@@ -749,6 +827,18 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
+              <div className="input-group">
+                <label className="input-label" style={{ fontSize: '16px' }}>Фотография запчасти</label>
+                <input
+                  id="new-part-image"
+                  type="file"
+                  accept="image/*"
+                  className="input-field"
+                  style={{ padding: '8px 12px', fontSize: '15px' }}
+                  onChange={(e) => setNewImageFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
               <button
                 type="submit"
                 className="btn btn-success"
@@ -852,6 +942,24 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
+              {/* Отображение текущего фото и выбор нового */}
+              <div className="input-group">
+                <label className="input-label">Фотография запчасти</label>
+                {editImageUrl && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Текущее фото:</p>
+                    <img src={editImageUrl} alt="Текущее фото" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="input-field"
+                  style={{ padding: '8px 12px', fontSize: '15px' }}
+                  onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
               <div className="modal-actions">
                 <button
                   type="button"
@@ -891,8 +999,8 @@ export default function AdminDashboardPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', backgroundColor: 'var(--background)' }}>
                 {admins.map((adm) => (
                   <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--card-bg)', borderRadius: '4px' }}>
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '15px' }}>{adm.username}</strong>
+                    <div style={{ display: 'flex', flexGrow: 1, justifyContent: 'space-between', alignItems: 'center', marginRight: '10px' }}>
+                      <strong style={{ fontSize: '15px' }}>{adm.username}</strong>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>Пароль: {adm.password}</span>
                     </div>
                     {adm.username !== 'Администратор' && adm.username !== adminName && (
