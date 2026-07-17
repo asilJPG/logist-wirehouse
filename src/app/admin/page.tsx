@@ -21,6 +21,17 @@ interface AdminUser {
   password: string;
 }
 
+interface WriteOff {
+  id: string;
+  part_id: string | null;
+  part_name: string;
+  part_article: string;
+  quantity: number;
+  comment: string | null;
+  created_by: string;
+  created_at: string;
+}
+
 export default function AdminDashboardPage() {
   const [adminName, setAdminName] = useState<string>('');
   const [authLoading, setAuthLoading] = useState(true);
@@ -29,6 +40,20 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Навигация по вкладкам
+  const [activeTab, setActiveTab] = useState<'parts' | 'writeoffs'>('parts');
+
+  // Журнал списаний
+  const [writeoffs, setWriteoffs] = useState<WriteOff[]>([]);
+  const [writeoffsLoading, setWriteoffsLoading] = useState(false);
+
+  // Модалка проведения списания
+  const [showWriteOffModal, setShowWriteOffModal] = useState(false);
+  const [writeOffPart, setWriteOffPart] = useState<Part | null>(null);
+  const [writeOffQty, setWriteOffQty] = useState('1');
+  const [writeOffComment, setWriteOffComment] = useState('');
+  const [writeOffBy, setWriteOffBy] = useState('');
 
   // Список сотрудников и управление доступом
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -86,6 +111,7 @@ export default function AdminDashboardPage() {
         setAdminName(storedAdmin);
         fetchParts();
         fetchAdmins();
+        fetchWriteOffs();
         setAuthLoading(false);
       }
     };
@@ -99,12 +125,12 @@ export default function AdminDashboardPage() {
       const { data, error } = await supabase.from('admins').select('*').order('username', { ascending: true });
       if (error) throw error;
       setAdmins(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Ошибка загрузки сотрудников:', err);
     }
   };
 
-  // Загрузка запчастей
+  // Загрузка списка деталей
   const fetchParts = async (query = '') => {
     try {
       setPartsLoading(true);
@@ -125,13 +151,13 @@ export default function AdminDashboardPage() {
         throw fetchError;
       }
 
-      const partsData = (data as Part[]) || [];
-      setParts(partsData);
+      const list = data || [];
+      setParts(list);
 
-      // Инициализируем временные значения для быстрого inline-редактирования
+      // Синхронизируем временные поля для быстрого редактирования
       const prices: { [key: string]: string } = {};
       const quantities: { [key: string]: string } = {};
-      partsData.forEach((part) => {
+      list.forEach((part: Part) => {
         prices[part.id] = part.price.toString();
         quantities[part.id] = part.quantity.toString();
       });
@@ -142,6 +168,24 @@ export default function AdminDashboardPage() {
       setError('Не удалось загрузить данные со склада. Проверьте интернет-соединение.');
     } finally {
       setPartsLoading(false);
+    }
+  };
+
+  // Загрузка журнала списаний
+  const fetchWriteOffs = async () => {
+    try {
+      setWriteoffsLoading(true);
+      const { data, error: fetchErr } = await supabase
+        .from('write_offs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (fetchErr) throw fetchErr;
+      setWriteoffs(data || []);
+    } catch (err: any) {
+      console.error('Ошибка загрузки списаний:', err);
+    } finally {
+      setWriteoffsLoading(false);
     }
   };
 
@@ -283,7 +327,6 @@ export default function AdminDashboardPage() {
   // Загрузка изображения в Supabase Storage
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
-      // Генерируем уникальное имя файла
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
       const filePath = `parts/${fileName}`;
@@ -299,7 +342,6 @@ export default function AdminDashboardPage() {
         throw uploadError;
       }
 
-      // Получаем публичную ссылку
       const { data: urlData } = supabase.storage
         .from('part-images')
         .getPublicUrl(filePath);
@@ -319,8 +361,8 @@ export default function AdminDashboardPage() {
       alert('Пожалуйста, заполните имя и пароль.');
       return;
     }
-    setAddingAdmin(true);
 
+    setAddingAdmin(true);
     try {
       const { error: insertError } = await supabase.from('admins').insert([
         {
@@ -331,41 +373,32 @@ export default function AdminDashboardPage() {
 
       if (insertError) throw insertError;
 
+      alert(`Сотрудник "${newAdminUsername}" успешно создан!`);
       setNewAdminUsername('');
       setNewAdminPassword('');
       fetchAdmins();
-      alert('Сотрудник успешно добавлен!');
     } catch (err: any) {
       console.error('Ошибка при добавлении сотрудника:', err);
-      alert(`Не удалось добавить сотрудника: ${err.message}`);
+      alert('Не удалось добавить сотрудника. Возможно, имя уже занято или отсутствует интернет-связь.');
     } finally {
       setAddingAdmin(false);
     }
   };
 
   // Удаление сотрудника
-  const handleDeleteAdmin = async (id: string, name: string) => {
-    if (name === 'Администратор') {
-      alert('Нельзя удалить главного администратора.');
-      return;
-    }
-
-    if (name === adminName) {
-      alert('Вы не можете удалить самого себя из текущей сессии.');
-      return;
-    }
-
-    if (!confirm(`Вы действительно хотите аннулировать пароль и доступ сотрудника "${name}"?`)) {
+  const handleDeleteAdmin = async (id: string, username: string) => {
+    if (!confirm(`Вы действительно хотите удалить сотрудника "${username}"?`)) {
       return;
     }
 
     try {
       const { error: deleteError } = await supabase.from('admins').delete().eq('id', id);
       if (deleteError) throw deleteError;
+      alert(`Доступы сотрудника "${username}" удалены.`);
       fetchAdmins();
     } catch (err: any) {
       console.error('Ошибка удаления сотрудника:', err);
-      alert(`Не удалось удалить: ${err.message}`);
+      alert('Не удалось удалить сотрудника. Проверьте подключение к интернету.');
     }
   };
 
@@ -424,6 +457,7 @@ export default function AdminDashboardPage() {
       }
 
       setSuccessMessage(`Запчасть "${newName}" успешно добавлена на склад!`);
+      
       // Очистка формы
       setNewName('');
       setNewArticle('');
@@ -528,7 +562,7 @@ export default function AdminDashboardPage() {
     const priceNum = parseFloat(rawVal);
 
     if (isNaN(priceNum) || priceNum < 0) {
-      alert('Пожалуйста, введите корректную цену.');
+      alert('Введите корректную цену.');
       return;
     }
 
@@ -577,6 +611,70 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Инициация списания через модалку
+  const handleOpenWriteOffModal = (part: Part) => {
+    setWriteOffPart(part);
+    setWriteOffQty('1');
+    setWriteOffComment('');
+    setWriteOffBy(adminName);
+    setShowWriteOffModal(true);
+  };
+
+  // Проведение списания
+  const handlePerformWriteOff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!writeOffPart) return;
+
+    const qtyToSubtract = parseInt(writeOffQty, 10);
+    if (isNaN(qtyToSubtract) || qtyToSubtract <= 0) {
+      alert('Введите корректное количество для списания.');
+      return;
+    }
+
+    if (qtyToSubtract > writeOffPart.quantity) {
+      alert(`Недостаточно товара на складе. Доступно для списания: ${writeOffPart.quantity} шт.`);
+      return;
+    }
+
+    try {
+      setError(null);
+      setSuccessMessage(null);
+
+      // 1. Записываем в журнал списаний
+      const { error: logError } = await supabase.from('write_offs').insert([
+        {
+          part_id: writeOffPart.id,
+          part_name: writeOffPart.name,
+          part_article: writeOffPart.article,
+          quantity: qtyToSubtract,
+          comment: writeOffComment.trim() || null,
+          created_by: writeOffBy.trim() || 'Администратор',
+        },
+      ]);
+
+      if (logError) throw logError;
+
+      // 2. Списываем количество
+      const newQty = writeOffPart.quantity - qtyToSubtract;
+      const { error: updateError } = await supabase
+        .from('parts')
+        .update({ quantity: newQty })
+        .eq('id', writeOffPart.id);
+
+      if (updateError) throw updateError;
+
+      setSuccessMessage(`Списано ${qtyToSubtract} шт. детали "${writeOffPart.name}"`);
+      setShowWriteOffModal(false);
+
+      // 3. Перезагружаем списки
+      fetchParts(searchQuery);
+      fetchWriteOffs();
+    } catch (err: any) {
+      console.error('Ошибка при списании:', err);
+      alert('Не удалось провести списание. Проверьте интернет-соединение.');
+    }
+  };
+
   // Удаление детали
   const handleDeletePart = async (id: string, name: string) => {
     if (!confirm(`Вы действительно хотите удалить запчасть "${name}" со склада?`)) {
@@ -607,6 +705,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div>
+      {/* Шапка админки */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h1 style={{ fontSize: '32px' }}>Панель управления складом</h1>
@@ -622,381 +721,484 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Вкладки навигации */}
+      <div style={{ display: 'flex', gap: '15px', borderBottom: '2px solid var(--border)', marginBottom: '25px', paddingBottom: '2px' }}>
+        <button
+          onClick={() => setActiveTab('parts')}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: '18px',
+            fontWeight: activeTab === 'parts' ? 'bold' : 'normal',
+            color: activeTab === 'parts' ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'parts' ? '3px solid var(--primary)' : '3px solid transparent',
+            padding: '10px 15px',
+            cursor: 'pointer',
+            marginBottom: '-5px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          📋 Наличие запчастей
+        </button>
+        <button
+          onClick={() => setActiveTab('writeoffs')}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: '18px',
+            fontWeight: activeTab === 'writeoffs' ? 'bold' : 'normal',
+            color: activeTab === 'writeoffs' ? 'var(--primary)' : 'var(--text-muted)',
+            borderBottom: activeTab === 'writeoffs' ? '3px solid var(--primary)' : '3px solid transparent',
+            padding: '10px 15px',
+            cursor: 'pointer',
+            marginBottom: '-5px',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          📝 Журнал списаний
+        </button>
+      </div>
+
       {error && <div className="alert alert-error">{error}</div>}
       {successMessage && <div className="alert alert-success">{successMessage}</div>}
 
-      <div className="admin-grid">
-        {/* Левая часть: Список товаров и Поиск */}
-        <div className="admin-list-container">
-          <h2 style={{ fontSize: '24px', marginBottom: '15px' }}>Товары на складе</h2>
-          
-          <div className="search-container" style={{ marginBottom: '20px' }}>
-            <form onSubmit={handleSearchSubmit} className="search-box">
-              <input
-                type="text"
-                className="input-field search-input"
-                placeholder="Поиск по складу (название, артикул, бренд)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ fontSize: '18px', padding: '10px 15px' }}
-              />
-              <button type="submit" className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '18px', minHeight: 'auto' }}>
-                Искать
-              </button>
-            </form>
+      {/* Содержимое вкладок */}
+      {activeTab === 'parts' ? (
+        <div className="admin-grid">
+          {/* Левая часть: Список товаров и Поиск */}
+          <div className="admin-list-container">
+            <div className="search-container" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+              <form onSubmit={handleSearchSubmit} className="search-box">
+                <input
+                  type="text"
+                  className="input-field search-input"
+                  style={{ fontSize: '16px', padding: '10px 15px' }}
+                  placeholder="Быстрый поиск деталей на складе..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <button type="submit" className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '16px' }}>
+                  Найти
+                </button>
+              </form>
+            </div>
+
+            {partsLoading ? (
+              <div className="loading-spinner">Загрузка товаров...</div>
+            ) : parts.length === 0 ? (
+              <div className="no-results">Склад пуст или ничего не найдено.</div>
+            ) : (
+              <>
+                {/* Таблица запчастей для ПК */}
+                <div className="table-wrapper">
+                  <table className="parts-table" style={{ fontSize: '16px' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '70px' }}>Фото</th>
+                        <th>Артикул / Бренд</th>
+                        <th>Название</th>
+                        <th>Цена (сум)</th>
+                        <th>Количество</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parts.map((part) => {
+                        const isPriceChanged = tempPrices[part.id] !== part.price.toString();
+
+                        return (
+                          <tr key={part.id}>
+                            {/* Фото детали */}
+                            <td>
+                              {part.image_url ? (
+                                <img
+                                  src={part.image_url}
+                                  alt={part.name}
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    objectFit: 'cover',
+                                    borderRadius: '4px',
+                                    border: '1px solid var(--border)',
+                                  }}
+                                />
+                              ) : (
+                                <div style={{ width: '40px', height: '40px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: 'var(--text-muted)', border: '1px dashed var(--border)' }}>
+                                  📷
+                                </div>
+                              )}
+                            </td>
+                            {/* Артикул и Бренд */}
+                            <td>
+                              <strong style={{ fontFamily: 'monospace', fontSize: '18px', display: 'block' }}>{part.article}</strong>
+                              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{part.brand}</span>
+                            </td>
+                            {/* Название */}
+                            <td>
+                              <strong style={{ display: 'block' }}>{part.name}</strong>
+                            </td>
+                            {/* Inline Цена */}
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  className="quick-edit-input"
+                                  value={tempPrices[part.id] || ''}
+                                  onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
+                                />
+                                <button
+                                  onClick={() => handleQuickPriceSave(part.id, part.name)}
+                                  className={`btn btn-sm ${isPriceChanged ? 'btn-primary' : 'btn-secondary'}`}
+                                  style={{ minHeight: 'auto', padding: '6px 10px' }}
+                                  title="Сохранить цену"
+                                >
+                                  ✓
+                                </button>
+                              </div>
+                            </td>
+                            {/* Inline Количество */}
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <button
+                                  onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
+                                  className="quantity-btn"
+                                  type="button"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  className="quick-edit-input"
+                                  value={tempQuantities[part.id] || ''}
+                                  onChange={(e) => setTempQuantities({ ...tempQuantities, [part.id]: e.target.value })}
+                                  onBlur={() => {
+                                    const val = parseInt(tempQuantities[part.id], 10);
+                                    if (!isNaN(val) && val !== part.quantity) {
+                                      handleQuickQuantitySave(part.id, val, part.name);
+                                    }
+                                  }}
+                                  style={{ width: '60px', marginRight: '0' }}
+                                />
+                                <button
+                                  onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
+                                  className="quantity-btn"
+                                  type="button"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            {/* Действия */}
+                            <td>
+                              <div style={{ display: 'flex', gap: '5px' }}>
+                                <button
+                                  onClick={() => handleOpenWriteOffModal(part)}
+                                  className="btn btn-sm"
+                                  style={{ minHeight: 'auto', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                                  disabled={part.quantity <= 0}
+                                  title="Списания..."
+                                >
+                                  Списать
+                                </button>
+                                <button
+                                  onClick={() => openEditModal(part)}
+                                  className="btn btn-sm btn-secondary"
+                                  style={{ minHeight: 'auto' }}
+                                >
+                                  Изменить
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePart(part.id, part.name)}
+                                  className="btn btn-sm btn-danger"
+                                  style={{ minHeight: 'auto' }}
+                                >
+                                  Удалить
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Карточки запчастей для Мобильных */}
+                <div className="parts-cards">
+                  {parts.map((part) => (
+                    <div key={part.id} className="part-card">
+                      {part.image_url && (
+                        <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '12px' }}>
+                          <img src={part.image_url} alt={part.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                      )}
+                      <div className="part-card-title">{part.name}</div>
+                      <div className="part-card-row">
+                        <span className="part-card-label">Артикул:</span>
+                        <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
+                      </div>
+                      <div className="part-card-row">
+                        <span className="part-card-label">Производитель:</span>
+                        <span className="part-card-value">{part.brand}</span>
+                      </div>
+                      
+                      {/* Inline цена для мобильных */}
+                      <div className="part-card-row" style={{ alignItems: 'center' }}>
+                        <span className="part-card-label">Цена (сум):</span>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <input
+                            type="number"
+                            step="0.01"
+                            className="quick-edit-input"
+                            value={tempPrices[part.id] || ''}
+                            onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
+                            style={{ width: '100px' }}
+                          />
+                          <button
+                            onClick={() => handleQuickPriceSave(part.id, part.name)}
+                            className="btn btn-sm btn-primary"
+                            style={{ minHeight: 'auto', padding: '6px 10px' }}
+                          >
+                            Сохранить
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Inline количество для мобильных */}
+                      <div className="part-card-row" style={{ alignItems: 'center' }}>
+                        <span className="part-card-label">Количество:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <button
+                            onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
+                            className="quantity-btn"
+                            type="button"
+                          >
+                            -
+                          </button>
+                          <span style={{ minWidth: '40px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px' }}>
+                            {part.quantity} шт.
+                          </span>
+                          <button
+                            onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
+                            className="quantity-btn"
+                            type="button"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => handleOpenWriteOffModal(part)}
+                          className="btn btn-sm"
+                          style={{ flexGrow: 1, minHeight: '40px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                          disabled={part.quantity <= 0}
+                        >
+                          Списать...
+                        </button>
+                        <button
+                          onClick={() => openEditModal(part)}
+                          className="btn btn-sm btn-secondary"
+                          style={{ flexGrow: 1, minHeight: '40px' }}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          onClick={() => handleDeletePart(part.id, part.name)}
+                          className="btn btn-sm btn-danger"
+                          style={{ flexGrow: 1, minHeight: '40px' }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
-          {partsLoading ? (
-            <div className="loading-spinner">Загрузка данных...</div>
-          ) : parts.length === 0 ? (
-            <div className="no-results" style={{ padding: '25px' }}>
-              Деталей на складе не найдено. Добавьте первый товар справа или измените поиск.
+          {/* Правая часть: Форма добавления нового товара */}
+          <div className="admin-form-container">
+            <div className="admin-form-card">
+              <h3 style={{ fontSize: '22px', marginBottom: '15px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
+                Добавить запчасть
+              </h3>
+              
+              <form onSubmit={handleAddPart}>
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Артикул (номер детали)</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '16px' }}
+                    placeholder="Пусто для автогенерации (например: ART-H39K1L)"
+                    value={newArticle}
+                    onChange={(e) => setNewArticle(e.target.value)}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Производитель (бренд) *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '16px' }}
+                    placeholder="Например: Filtron"
+                    value={newBrand}
+                    onChange={(e) => setNewBrand(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Название запчасти *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '16px' }}
+                    placeholder="Например: Фильтр масляный"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div className="input-group">
+                    <label className="input-label" style={{ fontSize: '16px' }}>Цена (сум) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="input-field"
+                      style={{ padding: '8px 12px', fontSize: '16px' }}
+                      value={newPrice}
+                      onChange={(e) => setNewPrice(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label" style={{ fontSize: '16px' }}>Кол-во на складе *</label>
+                    <input
+                      type="number"
+                      className="input-field"
+                      style={{ padding: '8px 12px', fontSize: '16px' }}
+                      value={newQuantity}
+                      onChange={(e) => setNewQuantity(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Описание / Применяемость</label>
+                  <textarea
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '16px', minHeight: '80px', fontFamily: 'inherit' }}
+                    placeholder="Например: Подходит для Ford Focus 2, 1.6"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Фотография запчасти</label>
+                  {newImagePreviewUrl && (
+                    <div style={{ marginBottom: '10px' }}>
+                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Выбранная область (4:3):</p>
+                      <img src={newImagePreviewUrl} alt="Выбранная область" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                    </div>
+                  )}
+                  <input
+                    id="new-part-image"
+                    type="file"
+                    accept="image/*"
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '15px' }}
+                    onChange={(e) => handleFileSelect(e, 'new')}
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-success"
+                  style={{ width: '100%', marginTop: '10px', minHeight: '44px' }}
+                  disabled={addingPart}
+                >
+                  {addingPart ? 'Добавление...' : '➕ Добавить на склад'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Вкладка: Журнал списаний */
+        <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+            <h3 style={{ fontSize: '22px', margin: 0 }}>История списаний запчастей</h3>
+            <button onClick={fetchWriteOffs} className="btn btn-secondary btn-sm" style={{ minHeight: '34px' }}>
+              🔄 Обновить журнал
+            </button>
+          </div>
+
+          {writeoffsLoading ? (
+            <div className="loading-spinner">Загрузка журнала списаний...</div>
+          ) : writeoffs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-muted)' }}>
+              <p style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '5px' }}>Журнал списаний пуст</p>
+              <p>Здесь будут отображаться списанные со склада запчасти с комментариями.</p>
             </div>
           ) : (
-            <>
-              {/* Таблица запчастей для ПК */}
-              <div className="table-wrapper">
-                <table className="parts-table" style={{ fontSize: '16px' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '70px' }}>Фото</th>
-                      <th>Артикул / Бренд</th>
-                      <th>Название</th>
-                      <th>Цена (сум)</th>
-                      <th>Количество</th>
-                      <th>Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parts.map((part) => {
-                      const isPriceChanged = tempPrices[part.id] !== part.price.toString();
-
-                      return (
-                        <tr key={part.id}>
-                          {/* Изображение детали */}
-                          <td>
-                            {part.image_url ? (
-                              <img
-                                src={part.image_url}
-                                alt={part.name}
-                                style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border)' }}
-                              />
-                            ) : (
-                              <div style={{ width: '40px', height: '40px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: 'var(--text-muted)', border: '1px dashed var(--border)' }}>
-                                📷
-                              </div>
-                            )}
-                          </td>
-                          {/* Артикул и Бренд */}
-                          <td>
-                            <strong style={{ fontFamily: 'monospace', fontSize: '18px', display: 'block' }}>{part.article}</strong>
-                            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{part.brand}</span>
-                          </td>
-                          {/* Название */}
-                          <td>
-                            <strong style={{ display: 'block' }}>{part.name}</strong>
-                          </td>
-                          {/* Inline Цена */}
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className="quick-edit-input"
-                                value={tempPrices[part.id] || ''}
-                                onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
-                              />
-                              <button
-                                onClick={() => handleQuickPriceSave(part.id, part.name)}
-                                className={`btn btn-sm ${isPriceChanged ? 'btn-primary' : 'btn-secondary'}`}
-                                style={{ minHeight: 'auto', padding: '6px 10px' }}
-                                title="Сохранить цену"
-                              >
-                                ✓
-                              </button>
-                            </div>
-                          </td>
-                          {/* Inline Количество */}
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <button
-                                onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
-                                className="quantity-btn"
-                                type="button"
-                              >
-                                -
-                              </button>
-                              <input
-                                type="number"
-                                className="quick-edit-input"
-                                value={tempQuantities[part.id] || ''}
-                                onChange={(e) => setTempQuantities({ ...tempQuantities, [part.id]: e.target.value })}
-                                onBlur={() => {
-                                  const val = parseInt(tempQuantities[part.id], 10);
-                                  if (!isNaN(val) && val !== part.quantity) {
-                                    handleQuickQuantitySave(part.id, val, part.name);
-                                  }
-                                }}
-                                style={{ width: '60px', marginRight: '0' }}
-                              />
-                              <button
-                                onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
-                                className="quantity-btn"
-                                type="button"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </td>
-                          {/* Действия */}
-                          <td>
-                            <div style={{ display: 'flex', gap: '5px' }}>
-                              <button
-                                onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
-                                className="btn btn-sm"
-                                style={{ minHeight: 'auto', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
-                                disabled={part.quantity <= 0}
-                                title="Списать 1 штуку"
-                              >
-                                Списать 1
-                              </button>
-                              <button
-                                onClick={() => openEditModal(part)}
-                                className="btn btn-sm btn-secondary"
-                                style={{ minHeight: 'auto' }}
-                              >
-                                Изменить
-                              </button>
-                              <button
-                                onClick={() => handleDeletePart(part.id, part.name)}
-                                className="btn btn-sm btn-danger"
-                                style={{ minHeight: 'auto' }}
-                              >
-                                Удалить
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Карточки запчастей для Мобильных */}
-              <div className="parts-cards">
-                {parts.map((part) => (
-                  <div key={part.id} className="part-card">
-                    {part.image_url && (
-                      <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '12px' }}>
-                        <img src={part.image_url} alt={part.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
-                    )}
-                    <div className="part-card-title">{part.name}</div>
-                    <div className="part-card-row">
-                      <span className="part-card-label">Артикул:</span>
-                      <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
-                    </div>
-                    <div className="part-card-row">
-                      <span className="part-card-label">Производитель:</span>
-                      <span className="part-card-value">{part.brand}</span>
-                    </div>
-                    
-                    {/* Inline цена для мобильных */}
-                    <div className="part-card-row" style={{ alignItems: 'center' }}>
-                      <span className="part-card-label">Цена (сум):</span>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <input
-                          type="number"
-                          step="0.01"
-                          className="quick-edit-input"
-                          value={tempPrices[part.id] || ''}
-                          onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
-                          style={{ width: '100px' }}
-                        />
-                        <button
-                          onClick={() => handleQuickPriceSave(part.id, part.name)}
-                          className="btn btn-sm btn-primary"
-                          style={{ minHeight: 'auto', padding: '6px 10px' }}
-                        >
-                          Сохранить
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Inline количество для мобильных */}
-                    <div className="part-card-row" style={{ alignItems: 'center' }}>
-                      <span className="part-card-label">Количество:</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button
-                          onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
-                          className="quantity-btn"
-                          type="button"
-                        >
-                          -
-                        </button>
-                        <span style={{ minWidth: '40px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px' }}>
-                          {part.quantity} шт.
-                        </span>
-                        <button
-                          onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
-                          className="quantity-btn"
-                          type="button"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-
-
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                      <button
-                        onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
-                        className="btn btn-sm"
-                        style={{ flexGrow: 1, minHeight: '40px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
-                        disabled={part.quantity <= 0}
-                      >
-                        Списать 1 шт.
-                      </button>
-                      <button
-                        onClick={() => openEditModal(part)}
-                        className="btn btn-sm btn-secondary"
-                        style={{ flexGrow: 1, minHeight: '40px' }}
-                      >
-                        Изменить
-                      </button>
-                      <button
-                        onClick={() => handleDeletePart(part.id, part.name)}
-                        className="btn btn-sm btn-danger"
-                        style={{ flexGrow: 1, minHeight: '40px' }}
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className="table-wrapper" style={{ margin: 0, border: 'none', boxShadow: 'none', overflowX: 'auto' }}>
+              <table className="parts-table" style={{ fontSize: '15px', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>Дата / Время</th>
+                    <th>Запчасть / Артикул</th>
+                    <th>Кол-во</th>
+                    <th>Причина / На что списано</th>
+                    <th>Кто списал</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {writeoffs.map((item) => {
+                    const formattedDate = new Date(item.created_at).toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    });
+                    return (
+                      <tr key={item.id}>
+                        <td style={{ color: 'var(--text-muted)', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                          {formattedDate}
+                        </td>
+                        <td>
+                          <strong style={{ fontSize: '16px', display: 'block' }}>{item.part_name}</strong>
+                          <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                            {item.part_article}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 'bold', color: 'var(--danger)', fontSize: '17px', whiteSpace: 'nowrap' }}>
+                          -{item.quantity} шт.
+                        </td>
+                        <td style={{ fontStyle: item.comment ? 'normal' : 'italic', color: item.comment ? 'inherit' : 'var(--text-muted)' }}>
+                          {item.comment || 'комментарий отсутствует'}
+                        </td>
+                        <td style={{ fontWeight: '600' }}>{item.created_by}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
-
-        {/* Правая часть: Форма добавления нового товара */}
-        <div className="admin-form-container">
-          <div className="admin-form-card">
-            <h3 style={{ fontSize: '22px', marginBottom: '15px', borderBottom: '1px solid var(--border)', paddingBottom: '10px' }}>
-              Добавить запчасть
-            </h3>
-            
-            <form onSubmit={handleAddPart}>
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Артикул (номер детали)</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '16px' }}
-                  placeholder="Пусто для автогенерации (например: ART-H39K1L)"
-                  value={newArticle}
-                  onChange={(e) => setNewArticle(e.target.value)}
-                />
-              </div>
-
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Производитель (бренд) *</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '16px' }}
-                  placeholder="Например: Filtron"
-                  value={newBrand}
-                  onChange={(e) => setNewBrand(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Название запчасти *</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '16px' }}
-                  placeholder="Например: Фильтр масляный"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div className="input-group">
-                  <label className="input-label" style={{ fontSize: '16px' }}>Цена (сум) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="input-field"
-                    style={{ padding: '8px 12px', fontSize: '16px' }}
-                    value={newPrice}
-                    onChange={(e) => setNewPrice(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label className="input-label" style={{ fontSize: '16px' }}>Кол-во на складе *</label>
-                  <input
-                    type="number"
-                    className="input-field"
-                    style={{ padding: '8px 12px', fontSize: '16px' }}
-                    value={newQuantity}
-                    onChange={(e) => setNewQuantity(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-
-
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Описание / Применяемость</label>
-                <textarea
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '16px', minHeight: '80px', fontFamily: 'inherit' }}
-                  placeholder="Например: Подходит для Ford Focus 2, 1.6"
-                  value={newDescription}
-                  onChange={(e) => setNewDescription(e.target.value)}
-                />
-              </div>
-
-              <div className="input-group">
-                <label className="input-label" style={{ fontSize: '16px' }}>Фотография запчасти</label>
-                {newImagePreviewUrl && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Выбранная область (4:3):</p>
-                    <img src={newImagePreviewUrl} alt="Выбранная область" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
-                  </div>
-                )}
-                <input
-                  id="new-part-image"
-                  type="file"
-                  accept="image/*"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '15px' }}
-                  onChange={(e) => handleFileSelect(e, 'new')}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="btn btn-success"
-                style={{ width: '100%', marginTop: '10px', minHeight: '44px' }}
-                disabled={addingPart}
-              >
-                {addingPart ? 'Добавление...' : '➕ Добавить на склад'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Модальное окно редактирования запчасти (редактировать всё) */}
       {editingPart && (
@@ -1045,7 +1247,7 @@ export default function AdminDashboardPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div className="input-group">
-                  <label className="input-label">Цена (сум) *</label>
+                   <label className="input-label">Цена (сум) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1067,8 +1269,6 @@ export default function AdminDashboardPage() {
                   />
                 </div>
               </div>
-
-
 
               <div className="input-group">
                 <label className="input-label">Описание / Применяемость</label>
@@ -1121,7 +1321,89 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* Модальное окно управления доступом сотрудников */}
+      {/* Модальное окно проведения списания детали */}
+      {showWriteOffModal && writeOffPart && (
+        <div className="modal-overlay" style={{ zIndex: 1900 }}>
+          <div className="modal-content" style={{ maxWidth: '450px', padding: '24px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Списание запчасти</span>
+              <button onClick={() => setShowWriteOffModal(false)} className="modal-close">
+                &times;
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.01)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Деталь для списания:</p>
+              <strong style={{ fontSize: '16px', display: 'block', marginBottom: '4px' }}>{writeOffPart.name}</strong>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'monospace', display: 'block' }}>
+                Артикул: {writeOffPart.article} | Бренд: {writeOffPart.brand}
+              </span>
+              <span style={{ fontSize: '14px', marginTop: '8px', display: 'block', fontWeight: 'bold' }}>
+                Доступно на складе: {writeOffPart.quantity} шт.
+              </span>
+            </div>
+
+            <form onSubmit={handlePerformWriteOff}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Кол-во списания *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={writeOffPart.quantity}
+                    className="input-field"
+                    value={writeOffQty}
+                    onChange={(e) => setWriteOffQty(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                <div className="input-group">
+                  <label className="input-label">Кто списал *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={writeOffBy}
+                    onChange={(e) => setWriteOffBy(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '20px' }}>
+                <label className="input-label">Причина / На что списано</label>
+                <textarea
+                  className="input-field"
+                  placeholder="Например: Установлено на Ford Focus A001AA, продано клиенту..."
+                  style={{ minHeight: '80px', fontFamily: 'inherit', padding: '8px 12px' }}
+                  value={writeOffComment}
+                  onChange={(e) => setWriteOffComment(e.target.value)}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowWriteOffModal(false)}
+                  className="btn btn-secondary"
+                  style={{ minHeight: '40px' }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-danger"
+                  style={{ minHeight: '40px', backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: 'white' }}
+                >
+                  Подтвердить списание
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно Доступы сотрудников */}
       {showAdminsModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '500px' }}>
@@ -1157,31 +1439,29 @@ export default function AdminDashboardPage() {
 
             <form onSubmit={handleAddAdmin} style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '15px' }}>Добавить сотрудника</h4>
-              
-              <div className="input-group" style={{ marginBottom: '12px' }}>
-                <label className="input-label" style={{ fontSize: '14px', marginBottom: '4px' }}>Имя сотрудника</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '15px' }}
-                  placeholder="Например: Иван Иванов"
-                  value={newAdminUsername}
-                  onChange={(e) => setNewAdminUsername(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="input-group" style={{ marginBottom: '15px' }}>
-                <label className="input-label" style={{ fontSize: '14px', marginBottom: '4px' }}>Пароль для входа</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  style={{ padding: '8px 12px', fontSize: '15px' }}
-                  placeholder="Задайте надежный пароль"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
-                  required
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div className="input-group">
+                  <label className="input-label">Имя сотрудника *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Например: Иван"
+                    value={newAdminUsername}
+                    onChange={(e) => setNewAdminUsername(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Пароль для входа *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Пароль"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="modal-actions" style={{ marginTop: '10px' }}>
@@ -1205,117 +1485,117 @@ export default function AdminDashboardPage() {
             </form>
           </div>
         </div>
-        )}
+      )}
 
-        {/* Модальное окно для обрезки фотографии */}
-        {showCropModal && cropImageSrc && (
-          <div className="modal-overlay" style={{ zIndex: 2000 }}>
-            <div className="modal-content" style={{ maxWidth: '400px', padding: '20px' }}>
-              <div className="modal-header">
-                <span className="modal-title">Выбор области фото (4:3)</span>
-                <button onClick={() => setShowCropModal(false)} className="modal-close">
-                  &times;
-                </button>
-              </div>
+      {/* Модальное окно для обрезки фотографии */}
+      {showCropModal && cropImageSrc && (
+        <div className="modal-overlay" style={{ zIndex: 2000 }}>
+          <div className="modal-content" style={{ maxWidth: '400px', padding: '20px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Выбор области фото (4:3)</span>
+              <button onClick={() => setShowCropModal(false)} className="modal-close">
+                &times;
+              </button>
+            </div>
+            
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '15px' }}>
+              Перетаскивайте фото мышкой/пальцем и увеличивайте ползунком снизу, чтобы выбрать нужную область для карточки.
+            </p>
+
+            {/* Контейнер обрезки */}
+            <div
+              style={{
+                width: '360px',
+                height: '270px',
+                position: 'relative',
+                overflow: 'hidden',
+                cursor: 'move',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                backgroundColor: '#000000',
+                margin: '0 auto 15px auto',
+                userSelect: 'none',
+              }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
+              <img
+                src={cropImageSrc}
+                alt="Crop preview"
+                onLoad={handleImageLoaded}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: `translate(-50%, -50%) translate(${cropDrag.x}px, ${cropDrag.y}px) scale(${cropZoom})`,
+                  transformOrigin: 'center center',
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                  pointerEvents: 'none',
+                }}
+              />
               
-              <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '15px' }}>
-                Перетаскивайте фото мышкой/пальцем и увеличивайте ползунком снизу, чтобы выбрать нужную область для карточки.
-              </p>
-
-              {/* Контейнер обрезки */}
+              {/* Рамка обрезки в центре: 320x240 */}
               <div
                 style={{
-                  width: '360px',
-                  height: '270px',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  cursor: 'move',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  backgroundColor: '#000000',
-                  margin: '0 auto 15px auto',
-                  userSelect: 'none',
+                  position: 'absolute',
+                  top: '15px',
+                  left: '20px',
+                  width: '320px',
+                  height: '240px',
+                  border: '2px dashed #ffffff',
+                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
+                  pointerEvents: 'none',
+                  borderRadius: '4px',
                 }}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+              />
+            </div>
+
+            {/* Зум ползунок */}
+            <div className="input-group" style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '14px' }}>
+                <span className="input-label" style={{ margin: 0 }}>Увеличение</span>
+                <span style={{ fontWeight: 'bold' }}>{Math.round(cropZoom * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1.0"
+                max="3.0"
+                step="0.05"
+                value={cropZoom}
+                onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                style={{ width: '100%', cursor: 'pointer' }}
+              />
+            </div>
+
+            {/* Кнопки */}
+            <div className="modal-actions">
+              <button
+                type="button"
+                onClick={() => setShowCropModal(false)}
+                className="btn btn-secondary"
+                style={{ minHeight: '40px' }}
               >
-                <img
-                  src={cropImageSrc}
-                  alt="Crop preview"
-                  onLoad={handleImageLoaded}
-                  style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: '50%',
-                    transform: `translate(-50%, -50%) translate(${cropDrag.x}px, ${cropDrag.y}px) scale(${cropZoom})`,
-                    transformOrigin: 'center center',
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
-                    pointerEvents: 'none',
-                  }}
-                />
-                
-                {/* Рамка обрезки в центре: 320x240 */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '15px',
-                    left: '20px',
-                    width: '320px',
-                    height: '240px',
-                    border: '2px dashed #ffffff',
-                    boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6)',
-                    pointerEvents: 'none',
-                    borderRadius: '4px',
-                  }}
-                />
-              </div>
-
-              {/* Зум ползунок */}
-              <div className="input-group" style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '14px' }}>
-                  <span className="input-label" style={{ margin: 0 }}>Увеличение</span>
-                  <span style={{ fontWeight: 'bold' }}>{Math.round(cropZoom * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="1.0"
-                  max="3.0"
-                  step="0.05"
-                  value={cropZoom}
-                  onChange={(e) => setCropZoom(parseFloat(e.target.value))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Кнопки */}
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  onClick={() => setShowCropModal(false)}
-                  className="btn btn-secondary"
-                  style={{ minHeight: '40px' }}
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyCrop}
-                  className="btn btn-primary"
-                  style={{ minHeight: '40px' }}
-                >
-                  Готово
-                </button>
-              </div>
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyCrop}
+                className="btn btn-primary"
+                style={{ minHeight: '40px' }}
+              >
+                Готово
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    );
-  }
+        </div>
+      )}
+    </div>
+  );
+}
