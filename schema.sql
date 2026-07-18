@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS public.parts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     article TEXT NOT NULL,
-    brand TEXT NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 0,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     description TEXT,
@@ -35,8 +34,9 @@ CREATE TABLE IF NOT EXISTS public.write_offs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Если таблица parts уже создана, удалим ненужное поле location и добавим нужное image_url:
+-- Если таблица parts уже создана, удалим ненужное поле location и brand, и добавим нужное image_url:
 ALTER TABLE public.parts DROP COLUMN IF EXISTS location;
+ALTER TABLE public.parts DROP COLUMN IF EXISTS brand;
 ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 -- Отключение RLS для новой таблицы списаний
@@ -61,7 +61,6 @@ CREATE TRIGGER update_parts_updated_at
 -- 5. Добавление индексов для ускорения поиска
 CREATE INDEX IF NOT EXISTS parts_name_idx ON public.parts (name);
 CREATE INDEX IF NOT EXISTS parts_article_idx ON public.parts (article);
-CREATE INDEX IF NOT EXISTS parts_brand_idx ON public.parts (brand);
 CREATE INDEX IF NOT EXISTS write_offs_created_at_idx ON public.write_offs (created_at DESC);
 
 -- 6. Создание стандартного администратора (логин по паролю: 12345)

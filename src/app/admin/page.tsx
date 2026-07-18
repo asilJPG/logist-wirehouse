@@ -8,7 +8,6 @@ interface Part {
   id: string;
   name: string;
   article: string;
-  brand: string;
   quantity: number;
   price: number;
   description: string | null;
@@ -65,7 +64,6 @@ export default function AdminDashboardPage() {
   // Состояние для формы добавления товара
   const [newName, setNewName] = useState('');
   const [newArticle, setNewArticle] = useState('');
-  const [newBrand, setNewBrand] = useState('');
   const [newPrice, setNewPrice] = useState('0');
   const [newQuantity, setNewQuantity] = useState('0');
   const [newDescription, setNewDescription] = useState('');
@@ -87,7 +85,6 @@ export default function AdminDashboardPage() {
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [editName, setEditName] = useState('');
   const [editArticle, setEditArticle] = useState('');
-  const [editBrand, setEditBrand] = useState('');
   const [editPrice, setEditPrice] = useState('0');
   const [editQuantity, setEditQuantity] = useState('0');
   const [editDescription, setEditDescription] = useState('');
@@ -140,7 +137,7 @@ export default function AdminDashboardPage() {
 
       if (query.trim()) {
         const q = `%${query.trim()}%`;
-        queryBuilder = queryBuilder.or(`name.ilike.${q},article.ilike.${q},brand.ilike.${q},description.ilike.${q}`);
+        queryBuilder = queryBuilder.or(`name.ilike.${q},article.ilike.${q},description.ilike.${q}`);
       }
 
       queryBuilder = queryBuilder.order('name', { ascending: true });
@@ -444,7 +441,6 @@ export default function AdminDashboardPage() {
         {
           name: newName.trim(),
           article: finalArticle,
-          brand: newBrand.trim(),
           price: priceNum,
           quantity: qtyNum,
           description: newDescription.trim() || null,
@@ -461,7 +457,6 @@ export default function AdminDashboardPage() {
       // Очистка формы
       setNewName('');
       setNewArticle('');
-      setNewBrand('');
       setNewPrice('0');
       setNewQuantity('0');
       setNewDescription('');
@@ -487,7 +482,6 @@ export default function AdminDashboardPage() {
     setEditingPart(part);
     setEditName(part.name);
     setEditArticle(part.article);
-    setEditBrand(part.brand);
     setEditPrice(part.price.toString());
     setEditQuantity(part.quantity.toString());
     setEditDescription(part.description || '');
@@ -533,7 +527,6 @@ export default function AdminDashboardPage() {
         .update({
           name: editName.trim(),
           article: editArticle.trim(),
-          brand: editBrand.trim(),
           price: priceNum,
           quantity: qtyNum,
           description: editDescription.trim() || null,
@@ -795,7 +788,7 @@ export default function AdminDashboardPage() {
                     <thead>
                       <tr>
                         <th style={{ width: '70px' }}>Фото</th>
-                        <th>Артикул / Бренд</th>
+                        <th>Артикул</th>
                         <th>Название</th>
                         <th>Цена (сум)</th>
                         <th>Количество</th>
@@ -828,10 +821,9 @@ export default function AdminDashboardPage() {
                                 </div>
                               )}
                             </td>
-                            {/* Артикул и Бренд */}
+                            {/* Артикул */}
                             <td>
-                              <strong style={{ fontFamily: 'monospace', fontSize: '18px', display: 'block' }}>{part.article}</strong>
-                              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>{part.brand}</span>
+                              <strong style={{ fontFamily: 'monospace', fontSize: '18px' }}>{part.article}</strong>
                             </td>
                             {/* Название */}
                             <td>
@@ -938,10 +930,6 @@ export default function AdminDashboardPage() {
                         <span className="part-card-label">Артикул:</span>
                         <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
                       </div>
-                      <div className="part-card-row">
-                        <span className="part-card-label">Производитель:</span>
-                        <span className="part-card-value">{part.brand}</span>
-                      </div>
                       
                       {/* Inline цена для мобильных */}
                       <div className="part-card-row" style={{ alignItems: 'center' }}>
@@ -1037,19 +1025,6 @@ export default function AdminDashboardPage() {
                     placeholder="Оставьте пустым для автогенерации"
                     value={newArticle}
                     onChange={(e) => setNewArticle(e.target.value)}
-                  />
-                </div>
-
-                <div className="input-group">
-                  <label className="input-label" style={{ fontSize: '16px' }}>Производитель (бренд) *</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    style={{ padding: '8px 12px', fontSize: '16px' }}
-                    placeholder="Бренд"
-                    value={newBrand}
-                    onChange={(e) => setNewBrand(e.target.value)}
-                    required
                   />
                 </div>
 
@@ -1224,17 +1199,6 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="input-group">
-                <label className="input-label">Производитель (бренд) *</label>
-                <input
-                  type="text"
-                  className="input-field"
-                  value={editBrand}
-                  onChange={(e) => setEditBrand(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="input-group">
                 <label className="input-label">Название запчасти *</label>
                 <input
                   type="text"
@@ -1336,7 +1300,7 @@ export default function AdminDashboardPage() {
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Деталь для списания:</p>
               <strong style={{ fontSize: '16px', display: 'block', marginBottom: '4px' }}>{writeOffPart.name}</strong>
               <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'monospace', display: 'block' }}>
-                Артикул: {writeOffPart.article} | Бренд: {writeOffPart.brand}
+                Артикул: {writeOffPart.article}
               </span>
               <span style={{ fontSize: '14px', marginTop: '8px', display: 'block', fontWeight: 'bold' }}>
                 Доступно на складе: {writeOffPart.quantity} шт.

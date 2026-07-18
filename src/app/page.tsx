@@ -7,7 +7,6 @@ interface Part {
   id: string;
   name: string;
   article: string;
-  brand: string;
   quantity: number;
   price: number;
   description: string | null;
@@ -103,7 +102,6 @@ export default function HomePage() {
     return (
       part.name.toLowerCase().includes(q) ||
       part.article.toLowerCase().includes(q) ||
-      part.brand.toLowerCase().includes(q) ||
       (part.description && part.description.toLowerCase().includes(q))
     );
   });
@@ -165,9 +163,6 @@ export default function HomePage() {
                   ) : (
                     <span className="part-card-placeholder">📷</span>
                   )}
-                </div>
-                <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  {part.brand}
                 </div>
                 <div className="part-card-title" style={{ fontSize: '18px', marginBottom: '8px', lineHeight: '1.3', height: '48px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                   {part.name}
@@ -238,10 +233,7 @@ export default function HomePage() {
               {/* Правая часть: инфо */}
               <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '15px', color: 'var(--text-muted)', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                      {selectedPart.brand}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                     <button
                       onClick={() => setSelectedPart(null)}
                       style={{ background: 'none', border: 'none', fontSize: '28px', color: 'var(--text-muted)', cursor: 'pointer', lineHeight: '0.5', padding: '5px' }}
