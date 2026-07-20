@@ -9,9 +9,10 @@ interface Part {
   name: string;
   article: string;
   quantity: number;
-  price: number;
+  price_uzs: number;
+  price_usd: number;
   description: string | null;
-  image_url: string | null;
+  image_urls: string[] | null;
 }
 
 interface AdminUser {
@@ -64,10 +65,12 @@ export default function AdminDashboardPage() {
   // Состояние для формы добавления товара
   const [newName, setNewName] = useState('');
   const [newArticle, setNewArticle] = useState('');
-  const [newPrice, setNewPrice] = useState('0');
+  const [newPriceUZS, setNewPriceUZS] = useState('0');
+  const [newPriceUSD, setNewPriceUSD] = useState('0');
   const [newQuantity, setNewQuantity] = useState('0');
   const [newDescription, setNewDescription] = useState('');
-  const [newImageFile, setNewImageFile] = useState<File | null>(null);
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
   const [addingPart, setAddingPart] = useState(false);
   
   // Состояния для обрезки фото
@@ -79,21 +82,25 @@ export default function AdminDashboardPage() {
   const [isDraggingCrop, setIsDraggingCrop] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [imageNaturalSize, setImageNaturalSize] = useState({ w: 0, h: 0 });
-  const [newImagePreviewUrl, setNewImagePreviewUrl] = useState<string | null>(null);
 
   // Состояние для редактирования товара в модальном окне
   const [editingPart, setEditingPart] = useState<Part | null>(null);
   const [editName, setEditName] = useState('');
   const [editArticle, setEditArticle] = useState('');
-  const [editPrice, setEditPrice] = useState('0');
+  const [editPriceUZS, setEditPriceUZS] = useState('0');
+  const [editPriceUSD, setEditPriceUSD] = useState('0');
   const [editQuantity, setEditQuantity] = useState('0');
   const [editDescription, setEditDescription] = useState('');
-  const [editImageUrl, setEditImageUrl] = useState<string | null>(null);
-  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  
+  // Управление существующими и новыми фото в режиме редактирования
+  const [editExistingImageUrls, setEditExistingImageUrls] = useState<string[]>([]);
+  const [editNewImageFiles, setEditNewImageFiles] = useState<File[]>([]);
+  const [editNewImagePreviews, setEditNewImagePreviews] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Состояния для быстрого inline-редактирования
-  const [tempPrices, setTempPrices] = useState<{ [key: string]: string }>({});
+  // Состояния для быстрого inline-редактирования цен и количества
+  const [tempPricesUZS, setTempPricesUZS] = useState<{ [key: string]: string }>({});
+  const [tempPricesUSD, setTempPricesUSD] = useState<{ [key: string]: string }>({});
   const [tempQuantities, setTempQuantities] = useState<{ [key: string]: string }>({});
 
   const router = useRouter();
@@ -152,13 +159,16 @@ export default function AdminDashboardPage() {
       setParts(list);
 
       // Синхронизируем временные поля для быстрого редактирования
-      const prices: { [key: string]: string } = {};
+      const pricesUZS: { [key: string]: string } = {};
+      const pricesUSD: { [key: string]: string } = {};
       const quantities: { [key: string]: string } = {};
       list.forEach((part: Part) => {
-        prices[part.id] = part.price.toString();
+        pricesUZS[part.id] = part.price_uzs.toString();
+        pricesUSD[part.id] = part.price_usd.toString();
         quantities[part.id] = part.quantity.toString();
       });
-      setTempPrices(prices);
+      setTempPricesUZS(pricesUZS);
+      setTempPricesUSD(pricesUSD);
       setTempQuantities(quantities);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
@@ -210,6 +220,9 @@ export default function AdminDashboardPage() {
       setShowCropModal(true);
     };
     reader.readAsDataURL(file);
+
+    // Сбрасываем значение инпута, чтобы можно было выбрать тот же файл повторно
+    e.target.value = '';
   };
 
   const handleImageLoaded = (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -239,7 +252,7 @@ export default function AdminDashboardPage() {
       setIsDraggingCrop(true);
       setDragStart({
         x: e.touches[0].clientX - cropDrag.x,
-        y: e.touches[0].clientY - cropDrag.y
+        y: e.touches[0].clientY - dragStart.y
       });
     }
   };
@@ -305,15 +318,15 @@ export default function AdminDashboardPage() {
 
       canvas.toBlob((blob) => {
         if (blob) {
-          const croppedFile = new File([blob], 'part_photo_cropped.jpg', { type: 'image/jpeg' });
+          const croppedFile = new File([blob], `part_${Date.now()}.jpg`, { type: 'image/jpeg' });
           const previewUrl = URL.createObjectURL(blob);
           
           if (cropTarget === 'new') {
-            setNewImageFile(croppedFile);
-            setNewImagePreviewUrl(previewUrl);
+            setNewImageFiles((prev) => [...prev, croppedFile]);
+            setNewImagePreviews((prev) => [...prev, previewUrl]);
           } else {
-            setEditImageFile(croppedFile);
-            setEditImageUrl(previewUrl);
+            setEditNewImageFiles((prev) => [...prev, croppedFile]);
+            setEditNewImagePreviews((prev) => [...prev, previewUrl]);
           }
         }
         setShowCropModal(false);
@@ -324,8 +337,8 @@ export default function AdminDashboardPage() {
   // Загрузка изображения в Supabase Storage
   const uploadImage = async (file: File): Promise<string | null> => {
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
       const filePath = `parts/${fileName}`;
 
       const { data, error: uploadError } = await supabase.storage
@@ -406,11 +419,12 @@ export default function AdminDashboardPage() {
     setError(null);
     setSuccessMessage(null);
 
-    const priceNum = parseFloat(newPrice);
+    const priceUzsNum = parseFloat(newPriceUZS);
+    const priceUsdNum = parseFloat(newPriceUSD);
     const qtyNum = parseInt(newQuantity, 10);
 
-    if (isNaN(priceNum) || priceNum < 0) {
-      setError('Пожалуйста, введите корректную цену.');
+    if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
+      setError('Пожалуйста, введите корректные цены.');
       setAddingPart(false);
       return;
     }
@@ -422,9 +436,13 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      let imageUrl: string | null = null;
-      if (newImageFile) {
-        imageUrl = await uploadImage(newImageFile);
+      // Загружаем все обрезанные фото из очереди
+      const uploadedUrls: string[] = [];
+      for (const file of newImageFiles) {
+        const url = await uploadImage(file);
+        if (url) {
+          uploadedUrls.push(url);
+        }
       }
 
       let finalArticle = newArticle.trim();
@@ -441,10 +459,11 @@ export default function AdminDashboardPage() {
         {
           name: newName.trim(),
           article: finalArticle,
-          price: priceNum,
+          price_uzs: priceUzsNum,
+          price_usd: priceUsdNum,
           quantity: qtyNum,
           description: newDescription.trim() || null,
-          image_url: imageUrl,
+          image_urls: uploadedUrls,
         },
       ]);
 
@@ -457,15 +476,12 @@ export default function AdminDashboardPage() {
       // Очистка формы
       setNewName('');
       setNewArticle('');
-      setNewPrice('0');
+      setNewPriceUZS('0');
+      setNewPriceUSD('0');
       setNewQuantity('0');
       setNewDescription('');
-      setNewImageFile(null);
-      setNewImagePreviewUrl(null);
-      
-      // Сброс input-файла
-      const fileInput = document.getElementById('new-part-image') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
+      setNewImageFiles([]);
+      setNewImagePreviews([]);
 
       // Перезагрузка списка деталей
       fetchParts(searchQuery);
@@ -482,11 +498,15 @@ export default function AdminDashboardPage() {
     setEditingPart(part);
     setEditName(part.name);
     setEditArticle(part.article);
-    setEditPrice(part.price.toString());
+    setEditPriceUZS(part.price_uzs.toString());
+    setEditPriceUSD(part.price_usd.toString());
     setEditQuantity(part.quantity.toString());
     setEditDescription(part.description || '');
-    setEditImageUrl(part.image_url);
-    setEditImageFile(null);
+    
+    // Инициализация фото
+    setEditExistingImageUrls(part.image_urls || []);
+    setEditNewImageFiles([]);
+    setEditNewImagePreviews([]);
   };
 
   // Сохранение изменений из модального окна
@@ -498,11 +518,12 @@ export default function AdminDashboardPage() {
     setError(null);
     setSuccessMessage(null);
 
-    const priceNum = parseFloat(editPrice);
+    const priceUzsNum = parseFloat(editPriceUZS);
+    const priceUsdNum = parseFloat(editPriceUSD);
     const qtyNum = parseInt(editQuantity, 10);
 
-    if (isNaN(priceNum) || priceNum < 0) {
-      setError('Введите корректную цену.');
+    if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
+      setError('Введите корректные цены.');
       setSavingEdit(false);
       return;
     }
@@ -514,23 +535,28 @@ export default function AdminDashboardPage() {
     }
 
     try {
-      let finalImageUrl = editImageUrl;
-      if (editImageFile) {
-        const uploadedUrl = await uploadImage(editImageFile);
-        if (uploadedUrl) {
-          finalImageUrl = uploadedUrl;
+      // Загружаем новые добавленные фотографии
+      const uploadedUrls: string[] = [];
+      for (const file of editNewImageFiles) {
+        const url = await uploadImage(file);
+        if (url) {
+          uploadedUrls.push(url);
         }
       }
+
+      // Объединяем оставшиеся существующие и новые фотографии
+      const finalImageUrls = [...editExistingImageUrls, ...uploadedUrls];
 
       const { error: updateError } = await supabase
         .from('parts')
         .update({
           name: editName.trim(),
           article: editArticle.trim(),
-          price: priceNum,
+          price_uzs: priceUzsNum,
+          price_usd: priceUsdNum,
           quantity: qtyNum,
           description: editDescription.trim() || null,
-          image_url: finalImageUrl,
+          image_urls: finalImageUrls,
         })
         .eq('id', editingPart.id);
 
@@ -551,18 +577,23 @@ export default function AdminDashboardPage() {
 
   // Быстрое изменение цены (inline)
   const handleQuickPriceSave = async (id: string, name: string) => {
-    const rawVal = tempPrices[id];
-    const priceNum = parseFloat(rawVal);
+    const rawValUZS = tempPricesUZS[id];
+    const rawValUSD = tempPricesUSD[id];
+    const priceUzsNum = parseFloat(rawValUZS);
+    const priceUsdNum = parseFloat(rawValUSD);
 
-    if (isNaN(priceNum) || priceNum < 0) {
-      alert('Введите корректную цену.');
+    if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
+      alert('Введите корректные цены.');
       return;
     }
 
     try {
       const { error: updateError } = await supabase
         .from('parts')
-        .update({ price: priceNum })
+        .update({
+          price_uzs: priceUzsNum,
+          price_usd: priceUsdNum
+        })
         .eq('id', id);
 
       if (updateError) {
@@ -570,11 +601,11 @@ export default function AdminDashboardPage() {
       }
 
       // Обновляем локальное состояние, чтобы отобразить сохраненное значение
-      setParts(parts.map((p) => (p.id === id ? { ...p, price: priceNum } : p)));
-      alert(`Цена для "${name}" обновлена на ${priceNum} сум.`);
+      setParts(parts.map((p) => (p.id === id ? { ...p, price_uzs: priceUzsNum, price_usd: priceUsdNum } : p)));
+      alert(`Цены для "${name}" успешно обновлены.`);
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения цены:', err);
-      alert('Не удалось обновить цену. Пожалуйста, проверьте интернет-соединение.');
+      alert('Не удалось обновить цены. Пожалуйста, проверьте интернет-соединение.');
     }
   };
 
@@ -696,6 +727,14 @@ export default function AdminDashboardPage() {
     return <div className="loading-spinner">Проверка прав доступа...</div>;
   }
 
+  // Получить первую картинку для таблицы превью
+  const getFirstPartImage = (part: Part) => {
+    if (part.image_urls && part.image_urls.length > 0) {
+      return part.image_urls[0];
+    }
+    return null;
+  };
+
   return (
     <div>
       {/* Шапка админки */}
@@ -790,31 +829,51 @@ export default function AdminDashboardPage() {
                         <th style={{ width: '70px' }}>Фото</th>
                         <th>Артикул</th>
                         <th>Название</th>
-                        <th>Цена (сум)</th>
+                        <th style={{ minWidth: '150px' }}>Цена</th>
                         <th>Количество</th>
                         <th>Действия</th>
                       </tr>
                     </thead>
                     <tbody>
                       {parts.map((part) => {
-                        const isPriceChanged = tempPrices[part.id] !== part.price.toString();
+                        const firstImg = getFirstPartImage(part);
+                        const isPriceChanged = 
+                          tempPricesUZS[part.id] !== part.price_uzs.toString() ||
+                          tempPricesUSD[part.id] !== part.price_usd.toString();
 
                         return (
                           <tr key={part.id}>
                             {/* Фото детали */}
                             <td>
-                              {part.image_url ? (
-                                <img
-                                  src={part.image_url}
-                                  alt={part.name}
-                                  style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    objectFit: 'cover',
-                                    borderRadius: '4px',
-                                    border: '1px solid var(--border)',
-                                  }}
-                                />
+                              {firstImg ? (
+                                <div style={{ position: 'relative', width: '40px', height: '40px' }}>
+                                  <img
+                                    src={firstImg}
+                                    alt={part.name}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                      borderRadius: '4px',
+                                      border: '1px solid var(--border)',
+                                    }}
+                                  />
+                                  {part.image_urls && part.image_urls.length > 1 && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      bottom: '-4px',
+                                      right: '-4px',
+                                      backgroundColor: 'var(--primary)',
+                                      color: 'white',
+                                      fontSize: '9px',
+                                      padding: '1px 3px',
+                                      borderRadius: '3px',
+                                      fontWeight: 'bold'
+                                    }}>
+                                      +{part.image_urls.length - 1}
+                                    </span>
+                                  )}
+                                </div>
                               ) : (
                                 <div style={{ width: '40px', height: '40px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: 'var(--text-muted)', border: '1px dashed var(--border)' }}>
                                   📷
@@ -829,23 +888,36 @@ export default function AdminDashboardPage() {
                             <td>
                               <strong style={{ display: 'block' }}>{part.name}</strong>
                             </td>
-                            {/* Inline Цена */}
+                            {/* Inline Цена (Двойная) */}
                             <td>
-                              <div style={{ display: 'flex', alignItems: 'center' }}>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  className="quick-edit-input"
-                                  value={tempPrices[part.id] || ''}
-                                  onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
-                                />
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <input
+                                    type="number"
+                                    className="quick-edit-input"
+                                    value={tempPricesUZS[part.id] || ''}
+                                    onChange={(e) => setTempPricesUZS({ ...tempPricesUZS, [part.id]: e.target.value })}
+                                    style={{ width: '90px', padding: '3px 6px' }}
+                                  />
+                                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>сум</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className="quick-edit-input"
+                                    value={tempPricesUSD[part.id] || ''}
+                                    onChange={(e) => setTempPricesUSD({ ...tempPricesUSD, [part.id]: e.target.value })}
+                                    style={{ width: '90px', padding: '3px 6px' }}
+                                  />
+                                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>$</span>
+                                </div>
                                 <button
                                   onClick={() => handleQuickPriceSave(part.id, part.name)}
                                   className={`btn btn-sm ${isPriceChanged ? 'btn-primary' : 'btn-secondary'}`}
-                                  style={{ minHeight: 'auto', padding: '6px 10px' }}
-                                  title="Сохранить цену"
+                                  style={{ minHeight: 'auto', padding: '2px 8px', fontSize: '12px', width: 'fit-content' }}
                                 >
-                                  ✓
+                                  Сохранить
                                 </button>
                               </div>
                             </td>
@@ -889,7 +961,7 @@ export default function AdminDashboardPage() {
                                   className="btn btn-sm"
                                   style={{ minHeight: 'auto', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
                                   disabled={part.quantity <= 0}
-                                  title="Списания..."
+                                  title="Списать со склада..."
                                 >
                                   Списать
                                 </button>
@@ -918,91 +990,107 @@ export default function AdminDashboardPage() {
 
                 {/* Карточки запчастей для Мобильных */}
                 <div className="parts-cards">
-                  {parts.map((part) => (
-                    <div key={part.id} className="part-card">
-                      {part.image_url && (
-                        <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '12px' }}>
-                          <img src={part.image_url} alt={part.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {parts.map((part) => {
+                    const firstImg = getFirstPartImage(part);
+                    return (
+                      <div key={part.id} className="part-card">
+                        {firstImg && (
+                          <div style={{ width: '100%', height: '140px', overflow: 'hidden', borderRadius: '6px', border: '1px solid var(--border)', marginBottom: '12px' }}>
+                            <img src={firstImg} alt={part.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                        )}
+                        <div className="part-card-title">{part.name}</div>
+                        <div className="part-card-row">
+                          <span className="part-card-label">Артикул:</span>
+                          <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
                         </div>
-                      )}
-                      <div className="part-card-title">{part.name}</div>
-                      <div className="part-card-row">
-                        <span className="part-card-label">Артикул:</span>
-                        <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
-                      </div>
-                      
-                      {/* Inline цена для мобильных */}
-                      <div className="part-card-row" style={{ alignItems: 'center' }}>
-                        <span className="part-card-label">Цена (сум):</span>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <input
-                            type="number"
-                            step="0.01"
-                            className="quick-edit-input"
-                            value={tempPrices[part.id] || ''}
-                            onChange={(e) => setTempPrices({ ...tempPrices, [part.id]: e.target.value })}
-                            style={{ width: '100px' }}
-                          />
-                          <button
-                            onClick={() => handleQuickPriceSave(part.id, part.name)}
-                            className="btn btn-sm btn-primary"
-                            style={{ minHeight: 'auto', padding: '6px 10px' }}
-                          >
-                            Сохранить
-                          </button>
+                        
+                        {/* Двойная цена для мобильных */}
+                        <div className="part-card-row" style={{ alignItems: 'flex-start', flexDirection: 'column', gap: '6px' }}>
+                          <span className="part-card-label" style={{ marginBottom: '2px' }}>Цена:</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <input
+                                type="number"
+                                className="quick-edit-input"
+                                value={tempPricesUZS[part.id] || ''}
+                                onChange={(e) => setTempPricesUZS({ ...tempPricesUZS, [part.id]: e.target.value })}
+                                style={{ width: '100px' }}
+                              />
+                              <span style={{ fontSize: '13px' }}>сум</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="quick-edit-input"
+                                value={tempPricesUSD[part.id] || ''}
+                                onChange={(e) => setTempPricesUSD({ ...tempPricesUSD, [part.id]: e.target.value })}
+                                style={{ width: '100px' }}
+                              />
+                              <span style={{ fontSize: '13px' }}>$</span>
+                            </div>
+                            <button
+                              onClick={() => handleQuickPriceSave(part.id, part.name)}
+                              className="btn btn-sm btn-primary"
+                              style={{ minHeight: 'auto', padding: '6px 12px', width: 'fit-content' }}
+                            >
+                              Сохранить цены
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Inline количество для мобильных */}
-                      <div className="part-card-row" style={{ alignItems: 'center' }}>
-                        <span className="part-card-label">Количество:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        {/* Inline количество для мобильных */}
+                        <div className="part-card-row" style={{ alignItems: 'center', marginTop: '10px' }}>
+                          <span className="part-card-label">Количество:</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <button
+                              onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
+                              className="quantity-btn"
+                              type="button"
+                            >
+                              -
+                            </button>
+                            <span style={{ minWidth: '40px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px' }}>
+                              {part.quantity} шт.
+                            </span>
+                            <button
+                              onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
+                              className="quantity-btn"
+                              type="button"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
                           <button
-                            onClick={() => handleQuickQuantitySave(part.id, part.quantity - 1, part.name)}
-                            className="quantity-btn"
-                            type="button"
+                            onClick={() => handleOpenWriteOffModal(part)}
+                            className="btn btn-sm"
+                            style={{ flexGrow: 1, minHeight: '40px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                            disabled={part.quantity <= 0}
                           >
-                            -
+                            Списать...
                           </button>
-                          <span style={{ minWidth: '40px', textAlign: 'center', fontWeight: 'bold', fontSize: '18px' }}>
-                            {part.quantity} шт.
-                          </span>
                           <button
-                            onClick={() => handleQuickQuantitySave(part.id, part.quantity + 1, part.name)}
-                            className="quantity-btn"
-                            type="button"
+                            onClick={() => openEditModal(part)}
+                            className="btn btn-sm btn-secondary"
+                            style={{ flexGrow: 1, minHeight: '40px' }}
                           >
-                            +
+                            Изменить
+                          </button>
+                          <button
+                            onClick={() => handleDeletePart(part.id, part.name)}
+                            className="btn btn-sm btn-danger"
+                            style={{ flexGrow: 1, minHeight: '40px' }}
+                          >
+                            Удалить
                           </button>
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => handleOpenWriteOffModal(part)}
-                          className="btn btn-sm"
-                          style={{ flexGrow: 1, minHeight: '40px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
-                          disabled={part.quantity <= 0}
-                        >
-                          Списать...
-                        </button>
-                        <button
-                          onClick={() => openEditModal(part)}
-                          className="btn btn-sm btn-secondary"
-                          style={{ flexGrow: 1, minHeight: '40px' }}
-                        >
-                          Изменить
-                        </button>
-                        <button
-                          onClick={() => handleDeletePart(part.id, part.name)}
-                          className="btn btn-sm btn-danger"
-                          style={{ flexGrow: 1, minHeight: '40px' }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -1043,29 +1131,41 @@ export default function AdminDashboardPage() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   <div className="input-group">
-                    <label className="input-label" style={{ fontSize: '16px' }}>Цена (сум) *</label>
+                    <label className="input-label" style={{ fontSize: '16px' }}>Цена в сумах *</label>
                     <input
                       type="number"
-                      step="0.01"
                       className="input-field"
                       style={{ padding: '8px 12px', fontSize: '16px' }}
-                      value={newPrice}
-                      onChange={(e) => setNewPrice(e.target.value)}
+                      value={newPriceUZS}
+                      onChange={(e) => setNewPriceUZS(e.target.value)}
                       required
                     />
                   </div>
 
                   <div className="input-group">
-                    <label className="input-label" style={{ fontSize: '16px' }}>Кол-во на складе *</label>
+                    <label className="input-label" style={{ fontSize: '16px' }}>Цена в USD ($) *</label>
                     <input
                       type="number"
+                      step="0.01"
                       className="input-field"
                       style={{ padding: '8px 12px', fontSize: '16px' }}
-                      value={newQuantity}
-                      onChange={(e) => setNewQuantity(e.target.value)}
+                      value={newPriceUSD}
+                      onChange={(e) => setNewPriceUSD(e.target.value)}
                       required
                     />
                   </div>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label" style={{ fontSize: '16px' }}>Кол-во на складе *</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    style={{ padding: '8px 12px', fontSize: '16px' }}
+                    value={newQuantity}
+                    onChange={(e) => setNewQuantity(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <div className="input-group">
@@ -1079,14 +1179,50 @@ export default function AdminDashboardPage() {
                   />
                 </div>
 
+                {/* Очередь загрузки фотографий */}
                 <div className="input-group">
-                  <label className="input-label" style={{ fontSize: '16px' }}>Фотография запчасти</label>
-                  {newImagePreviewUrl && (
-                    <div style={{ marginBottom: '10px' }}>
-                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Выбранная область (4:3):</p>
-                      <img src={newImagePreviewUrl} alt="Выбранная область" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                  <label className="input-label" style={{ fontSize: '16px' }}>Фотографии запчасти</label>
+                  
+                  {newImagePreviews.length > 0 && (
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px', border: '1px solid var(--border)', padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.01)' }}>
+                      {newImagePreviews.map((url, idx) => (
+                        <div key={idx} style={{ position: 'relative', width: '64px', height: '48px' }}>
+                          <img
+                            src={url}
+                            alt={`new-preview-${idx}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewImageFiles(newImageFiles.filter((_, i) => i !== idx));
+                              setNewImagePreviews(newImagePreviews.filter((_, i) => i !== idx));
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '-6px',
+                              right: '-6px',
+                              backgroundColor: 'var(--danger)',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              fontSize: '11px',
+                              lineHeight: '18px',
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              padding: 0,
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
+
                   <input
                     id="new-part-image"
                     type="file"
@@ -1095,6 +1231,9 @@ export default function AdminDashboardPage() {
                     style={{ padding: '8px 12px', fontSize: '15px' }}
                     onChange={(e) => handleFileSelect(e, 'new')}
                   />
+                  <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                    Вы можете выбрать и обрезать несколько изображений по очереди.
+                  </small>
                 </div>
 
                 <button
@@ -1178,7 +1317,7 @@ export default function AdminDashboardPage() {
       {/* Модальное окно редактирования запчасти (редактировать всё) */}
       {editingPart && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '550px' }}>
             <div className="modal-header">
               <span className="modal-title">Редактирование: {editingPart.name}</span>
               <button onClick={() => setEditingPart(null)} className="modal-close">
@@ -1211,27 +1350,38 @@ export default function AdminDashboardPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div className="input-group">
-                   <label className="input-label">Цена (сум) *</label>
+                   <label className="input-label">Цена в сумах *</label>
                   <input
                     type="number"
-                    step="0.01"
                     className="input-field"
-                    value={editPrice}
-                    onChange={(e) => setEditPrice(e.target.value)}
+                    value={editPriceUZS}
+                    onChange={(e) => setEditPriceUZS(e.target.value)}
                     required
                   />
                 </div>
 
                 <div className="input-group">
-                  <label className="input-label">Кол-во на складе *</label>
+                  <label className="input-label">Цена в USD ($) *</label>
                   <input
                     type="number"
+                    step="0.01"
                     className="input-field"
-                    value={editQuantity}
-                    onChange={(e) => setEditQuantity(e.target.value)}
+                    value={editPriceUSD}
+                    onChange={(e) => setEditPriceUSD(e.target.value)}
                     required
                   />
                 </div>
+              </div>
+
+              <div className="input-group">
+                <label className="input-label">Кол-во на складе *</label>
+                <input
+                  type="number"
+                  className="input-field"
+                  value={editQuantity}
+                  onChange={(e) => setEditQuantity(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="input-group">
@@ -1244,15 +1394,78 @@ export default function AdminDashboardPage() {
                 />
               </div>
 
-              {/* Отображение текущего фото и выбор нового */}
+              {/* Управление галереей фотографий при редактировании */}
               <div className="input-group">
-                <label className="input-label">Фотография запчасти</label>
-                {editImageUrl && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '5px' }}>Текущее фото / Область (4:3):</p>
-                    <img src={editImageUrl} alt="Текущее фото" style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                <label className="input-label">Фотографии запчасти</label>
+                
+                {/* Существующие и новые фотографии */}
+                {(editExistingImageUrls.length > 0 || editNewImagePreviews.length > 0) && (
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px', border: '1px solid var(--border)', padding: '10px', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.01)' }}>
+                    {/* Список существующих */}
+                    {editExistingImageUrls.map((url, idx) => (
+                      <div key={`existing-${idx}`} style={{ position: 'relative', width: '64px', height: '48px' }}>
+                        <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                        <button
+                          type="button"
+                          onClick={() => setEditExistingImageUrls(editExistingImageUrls.filter((_, i) => i !== idx))}
+                          style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            fontSize: '11px',
+                            lineHeight: '18px',
+                            cursor: 'pointer',
+                            padding: 0,
+                            fontWeight: 'bold'
+                          }}
+                          title="Удалить это фото"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Список новых */}
+                    {editNewImagePreviews.map((url, idx) => (
+                      <div key={`new-${idx}`} style={{ position: 'relative', width: '64px', height: '48px' }}>
+                        <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)', opacity: 0.8 }} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditNewImageFiles(editNewImageFiles.filter((_, i) => i !== idx));
+                            setEditNewImagePreviews(editNewImagePreviews.filter((_, i) => i !== idx));
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: '-6px',
+                            right: '-6px',
+                            backgroundColor: 'var(--danger)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            fontSize: '11px',
+                            lineHeight: '18px',
+                            cursor: 'pointer',
+                            padding: 0,
+                            fontWeight: 'bold'
+                          }}
+                          title="Отменить добавление"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
+
                 <input
                   type="file"
                   accept="image/*"
@@ -1260,6 +1473,9 @@ export default function AdminDashboardPage() {
                   style={{ padding: '8px 12px', fontSize: '15px' }}
                   onChange={(e) => handleFileSelect(e, 'edit')}
                 />
+                <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
+                  Вы можете добавить еще обрезанные изображения.
+                </small>
               </div>
 
               <div className="modal-actions">

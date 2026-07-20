@@ -8,9 +8,10 @@ interface Part {
   name: string;
   article: string;
   quantity: number;
-  price: number;
+  price_uzs: number;
+  price_usd: number;
   description: string | null;
-  image_url: string | null;
+  image_urls: string[] | null;
 }
 
 export default function HomePage() {
@@ -19,6 +20,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
+  const [activeImgIndex, setActiveImgIndex] = useState(0);
   const [shareCopied, setShareCopied] = useState<string | null>(null);
 
   // Функция для загрузки всех запчастей со склада
@@ -40,7 +42,6 @@ export default function HomePage() {
       setParts(data || []);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
-      // Пользовательская ошибка без упоминания Supabase/БД
       setError('Не удалось загрузить список запчастей. Проверьте интернет-соединение или обновите страницу.');
     } finally {
       setLoading(false);
@@ -65,6 +66,7 @@ export default function HomePage() {
           
           if (!singleError && data) {
             setSelectedPart(data as Part);
+            setActiveImgIndex(0);
           }
         } catch (err) {
           console.error('Ошибка загрузки детали по ссылке:', err);
@@ -89,10 +91,21 @@ export default function HomePage() {
       });
   };
 
-  // Форматирование цены (в сумы)
-  const formatPrice = (price: number) => {
+  // Открытие детальной карточки запчасти
+  const handleOpenPart = (part: Part) => {
+    setSelectedPart(part);
+    setActiveImgIndex(0);
+  };
+
+  // Форматирование цен
+  const formatPriceUZS = (price: number) => {
     const formatted = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0 }).format(price);
     return `${formatted} сум`;
+  };
+
+  const formatPriceUSD = (price: number) => {
+    const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price);
+    return `$${formatted}`;
   };
 
   // Мгновенная фильтрация списка запчастей на клиенте по мере ввода
@@ -106,12 +119,31 @@ export default function HomePage() {
     );
   });
 
+  // Получение основного изображения для карточки превью
+  const getPreviewImage = (part: Part) => {
+    if (part.image_urls && part.image_urls.length > 0) {
+      return part.image_urls[0];
+    }
+    return null;
+  };
+
+  // Навигация по галерее картинок
+  const handlePrevImage = (e: React.MouseEvent, imgLength: number) => {
+    e.stopPropagation();
+    setActiveImgIndex((prev) => (prev === 0 ? imgLength - 1 : prev - 1));
+  };
+
+  const handleNextImage = (e: React.MouseEvent, imgLength: number) => {
+    e.stopPropagation();
+    setActiveImgIndex((prev) => (prev === imgLength - 1 ? 0 : prev + 1));
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '25px', textAlign: 'center' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Наличие запчастей на складе</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '18px' }}>
-          Введите название детали, артикул (номер) или производителя — список обновится мгновенно.
+          Введите название детали или артикул (номер) — список обновится мгновенно.
         </p>
       </div>
 
@@ -147,52 +179,61 @@ export default function HomePage() {
 
           {/* Сетка карточек запчастей */}
           <div className="parts-grid">
-            {filteredParts.map((part) => (
-              <div
-                key={part.id}
-                className="part-card part-card-clickable"
-                onClick={() => setSelectedPart(part)}
-              >
-                <div className="part-card-image-wrapper">
-                  {part.image_url ? (
-                    <img
-                      src={part.image_url}
-                      alt={part.name}
-                      className="part-card-image"
-                    />
-                  ) : (
-                    <span className="part-card-placeholder">📷</span>
-                  )}
-                </div>
-                <div className="part-card-title" style={{ fontSize: '18px', marginBottom: '8px', lineHeight: '1.3', height: '48px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                  {part.name}
-                </div>
-                <div className="part-card-row" style={{ marginBottom: '10px' }}>
-                  <span className="part-card-label">Артикул:</span>
-                  <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
-                </div>
-                <div className="part-card-row" style={{ alignItems: 'center' }}>
-                  <span style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--primary)' }}>
-                    {formatPrice(part.price)}
-                  </span>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      style={{ minHeight: '30px', padding: '4px 8px', fontSize: '13px' }}
-                      title="Скопировать ссылку"
-                      onClick={(e) => handleShare(e, part.id)}
-                    >
-                      {shareCopied === part.id ? '✓' : '🔗'}
-                    </button>
-                    {part.quantity > 0 ? (
-                      <span className="status-badge status-in-stock">{part.quantity} шт.</span>
+            {filteredParts.map((part) => {
+              const previewImg = getPreviewImage(part);
+              return (
+                <div
+                  key={part.id}
+                  className="part-card part-card-clickable"
+                  onClick={() => handleOpenPart(part)}
+                >
+                  <div className="part-card-image-wrapper">
+                    {previewImg ? (
+                      <img
+                        src={previewImg}
+                        alt={part.name}
+                        className="part-card-image"
+                      />
                     ) : (
-                      <span className="status-badge status-out-of-stock">Нет</span>
+                      <span className="part-card-placeholder">📷</span>
                     )}
                   </div>
+                  <div className="part-card-title" style={{ fontSize: '18px', marginBottom: '8px', lineHeight: '1.3', height: '48px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {part.name}
+                  </div>
+                  <div className="part-card-row" style={{ marginBottom: '10px' }}>
+                    <span className="part-card-label">Артикул:</span>
+                    <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
+                  </div>
+                  <div className="part-card-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--primary)' }}>
+                        {formatPriceUZS(part.price_uzs)}
+                      </span>
+                      <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                        {formatPriceUSD(part.price_usd)}
+                      </span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: 'auto' }}>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ minHeight: '30px', padding: '4px 8px', fontSize: '13px' }}
+                        title="Скопировать ссылку"
+                        onClick={(e) => handleShare(e, part.id)}
+                      >
+                        {shareCopied === part.id ? '✓' : '🔗'}
+                      </button>
+                      {part.quantity > 0 ? (
+                        <span className="status-badge status-in-stock">{part.quantity} шт.</span>
+                      ) : (
+                        <span className="status-badge status-out-of-stock">Нет</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -215,19 +256,112 @@ export default function HomePage() {
             {/* Верхняя часть: Сетка с фото и инфо */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
               
-              {/* Левая часть: фото */}
-              <div style={{ width: '100%' }}>
-                <div style={{ width: '100%', height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.01)' }}>
-                  {selectedPart.image_url ? (
-                    <img
-                      src={selectedPart.image_url}
-                      alt={selectedPart.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
+              {/* Левая часть: фотогалерея */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{
+                  width: '100%',
+                  height: '280px',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: 'rgba(0,0,0,0.01)',
+                  position: 'relative'
+                }}>
+                  {selectedPart.image_urls && selectedPart.image_urls.length > 0 ? (
+                    <>
+                      <img
+                        src={selectedPart.image_urls[activeImgIndex]}
+                        alt={selectedPart.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                      
+                      {/* Стрелки перелистывания */}
+                      {selectedPart.image_urls.length > 1 && (
+                        <>
+                          <button
+                            onClick={(e) => handlePrevImage(e, selectedPart.image_urls!.length)}
+                            style={{
+                              position: 'absolute',
+                              left: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              backgroundColor: 'rgba(0,0,0,0.4)',
+                              color: 'white',
+                              border: 'none',
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '18px',
+                              fontWeight: 'bold',
+                              userSelect: 'none',
+                              zIndex: 10
+                            }}
+                          >
+                            ‹
+                          </button>
+                          <button
+                            onClick={(e) => handleNextImage(e, selectedPart.image_urls!.length)}
+                            style={{
+                              position: 'absolute',
+                              right: '10px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              backgroundColor: 'rgba(0,0,0,0.4)',
+                              color: 'white',
+                              border: 'none',
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '50%',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '18px',
+                              fontWeight: 'bold',
+                              userSelect: 'none',
+                              zIndex: 10
+                            }}
+                          >
+                            ›
+                          </button>
+                        </>
+                      )}
+                    </>
                   ) : (
                     <span style={{ fontSize: '72px', color: 'var(--text-muted)' }}>📷</span>
                   )}
                 </div>
+
+                {/* Линейка миниатюр под большим фото */}
+                {selectedPart.image_urls && selectedPart.image_urls.length > 1 && (
+                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                    {selectedPart.image_urls.map((url, idx) => (
+                      <img
+                        key={idx}
+                        src={url}
+                        alt={`mini-${idx}`}
+                        onClick={() => setActiveImgIndex(idx)}
+                        style={{
+                          width: '60px',
+                          height: '45px',
+                          objectFit: 'cover',
+                          borderRadius: '6px',
+                          border: activeImgIndex === idx ? '2px solid var(--primary)' : '1px solid var(--border)',
+                          cursor: 'pointer',
+                          opacity: activeImgIndex === idx ? 1 : 0.6,
+                          transition: 'all 0.15s ease'
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Правая часть: инфо */}
@@ -264,9 +398,14 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '30px', fontWeight: 'bold', color: 'var(--primary)' }}>
-                    {formatPrice(selectedPart.price)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--primary)', lineHeight: '1.1' }}>
+                      {formatPriceUZS(selectedPart.price_uzs)}
+                    </div>
+                    <div style={{ fontSize: '18px', color: 'var(--text-muted)', fontWeight: 'bold' }}>
+                      {formatPriceUSD(selectedPart.price_usd)}
+                    </div>
                   </div>
                   
                   <button
