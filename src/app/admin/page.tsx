@@ -155,7 +155,12 @@ export default function AdminDashboardPage() {
         throw fetchError;
       }
 
-      const list = data || [];
+      const list = (data || []).map((part: any) => ({
+        ...part,
+        price_uzs: part.price_uzs ?? part.price ?? 0,
+        price_usd: part.price_usd ?? 0,
+        image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
+      })) as Part[];
       setParts(list);
 
       // Синхронизируем временные поля для быстрого редактирования
@@ -163,9 +168,9 @@ export default function AdminDashboardPage() {
       const pricesUSD: { [key: string]: string } = {};
       const quantities: { [key: string]: string } = {};
       list.forEach((part: Part) => {
-        pricesUZS[part.id] = part.price_uzs.toString();
-        pricesUSD[part.id] = part.price_usd.toString();
-        quantities[part.id] = part.quantity.toString();
+        pricesUZS[part.id] = (part.price_uzs ?? 0).toString();
+        pricesUSD[part.id] = (part.price_usd ?? 0).toString();
+        quantities[part.id] = (part.quantity ?? 0).toString();
       });
       setTempPricesUZS(pricesUZS);
       setTempPricesUSD(pricesUSD);
@@ -498,9 +503,9 @@ export default function AdminDashboardPage() {
     setEditingPart(part);
     setEditName(part.name);
     setEditArticle(part.article);
-    setEditPriceUZS(part.price_uzs.toString());
-    setEditPriceUSD(part.price_usd.toString());
-    setEditQuantity(part.quantity.toString());
+    setEditPriceUZS((part.price_uzs ?? 0).toString());
+    setEditPriceUSD((part.price_usd ?? 0).toString());
+    setEditQuantity((part.quantity ?? 0).toString());
     setEditDescription(part.description || '');
     
     // Инициализация фото
@@ -838,8 +843,8 @@ export default function AdminDashboardPage() {
                       {parts.map((part) => {
                         const firstImg = getFirstPartImage(part);
                         const isPriceChanged = 
-                          tempPricesUZS[part.id] !== part.price_uzs.toString() ||
-                          tempPricesUSD[part.id] !== part.price_usd.toString();
+                          tempPricesUZS[part.id] !== (part.price_uzs ?? 0).toString() ||
+                          tempPricesUSD[part.id] !== (part.price_usd ?? 0).toString();
 
                         return (
                           <tr key={part.id}>

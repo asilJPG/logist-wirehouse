@@ -39,7 +39,13 @@ export default function HomePage() {
         throw fetchError;
       }
 
-      setParts(data || []);
+      const list = (data || []).map((part: any) => ({
+        ...part,
+        price_uzs: part.price_uzs ?? part.price ?? 0,
+        price_usd: part.price_usd ?? 0,
+        image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
+      })) as Part[];
+      setParts(list);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
       setError('Не удалось загрузить список запчастей. Проверьте интернет-соединение или обновите страницу.');
@@ -65,7 +71,13 @@ export default function HomePage() {
             .single();
           
           if (!singleError && data) {
-            setSelectedPart(data as Part);
+            const part = data as any;
+            setSelectedPart({
+              ...part,
+              price_uzs: part.price_uzs ?? part.price ?? 0,
+              price_usd: part.price_usd ?? 0,
+              image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
+            } as Part);
             setActiveImgIndex(0);
           }
         } catch (err) {
