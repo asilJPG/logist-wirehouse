@@ -63,7 +63,7 @@ export default function AdminDashboardPage() {
   const [showAdminsModal, setShowAdminsModal] = useState(false);
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [newAdminRole, setNewAdminRole] = useState<'manager' | 'employee'>('employee');
+  const [newAdminRole, setNewAdminRole] = useState<'admin' | 'manager' | 'employee'>('employee');
   const [addingAdmin, setAddingAdmin] = useState(false);
 
   // Состояние для формы добавления товара
@@ -1714,11 +1714,12 @@ export default function AdminDashboardPage() {
                   <select
                     className="input-field"
                     value={newAdminRole}
-                    onChange={(e) => setNewAdminRole(e.target.value as 'manager' | 'employee')}
+                    onChange={(e) => setNewAdminRole(e.target.value as 'admin' | 'manager' | 'employee')}
                     style={{ padding: '8px 12px', fontSize: '16px' }}
                   >
                     <option value="employee">Обычный сотрудник (только списание с главной)</option>
                     <option value="manager">Сотрудник склада / Менеджер (доступ в админку)</option>
+                    <option value="admin">Администратор (полный доступ + создание сотрудников)</option>
                   </select>
                 </div>
 
