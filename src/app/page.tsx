@@ -31,6 +31,8 @@ export default function HomePage() {
   const [writeOffPart, setWriteOffPart] = useState<Part | null>(null);
   const [writeOffQty, setWriteOffQty] = useState('1');
   const [writeOffComment, setWriteOffComment] = useState('');
+  const [writeOffPriceUZS, setWriteOffPriceUZS] = useState('0');
+  const [writeOffPriceUSD, setWriteOffPriceUSD] = useState('0');
 
   const router = useRouter();
 
@@ -128,6 +130,8 @@ export default function HomePage() {
     setWriteOffPart(part);
     setWriteOffQty('1');
     setWriteOffComment('');
+    setWriteOffPriceUZS((part.price_uzs ?? 0).toString());
+    setWriteOffPriceUSD((part.price_usd ?? 0).toString());
     setShowWriteOffModal(true);
   };
 
@@ -152,10 +156,17 @@ export default function HomePage() {
       return;
     }
 
+    const salePriceUzs = parseFloat(writeOffPriceUZS);
+    const salePriceUsd = parseFloat(writeOffPriceUSD);
+    if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
+      alert('Введите корректную цену продажи.');
+      return;
+    }
+
     try {
       setError(null);
 
-      // 1. Записываем в журнал списаний с трекингом ФИО, времени и устройства
+      // 1. Записываем в журнал списаний с трекингом ФИО, времени, устройства и фактической цены продажи
       const { error: logError } = await supabase.from('write_offs').insert([
         {
           part_id: writeOffPart.id,
@@ -165,6 +176,8 @@ export default function HomePage() {
           comment: writeOffComment.trim(),
           created_by: adminName,
           device: getDeviceName(),
+          price_uzs: salePriceUzs,
+          price_usd: salePriceUsd,
         },
       ]);
 
@@ -606,6 +619,30 @@ export default function HomePage() {
                   disabled
                   style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи (сум) *</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={writeOffPriceUZS}
+                    onChange={(e) => setWriteOffPriceUZS(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field"
+                    value={writeOffPriceUSD}
+                    onChange={(e) => setWriteOffPriceUSD(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="input-group" style={{ marginBottom: '20px' }}>

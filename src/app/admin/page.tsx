@@ -32,6 +32,8 @@ interface WriteOff {
   comment: string | null;
   created_by: string;
   device: string | null;
+  price_uzs: number | null;
+  price_usd: number | null;
   created_at: string;
 }
 
@@ -113,7 +115,13 @@ export default function AdminDashboardPage() {
   const [editWriteOffQty, setEditWriteOffQty] = useState('');
   const [editWriteOffComment, setEditWriteOffComment] = useState('');
   const [editWriteOffBy, setEditWriteOffBy] = useState('');
+  const [editWriteOffPriceUZS, setEditWriteOffPriceUZS] = useState('0');
+  const [editWriteOffPriceUSD, setEditWriteOffPriceUSD] = useState('0');
   const [savingWriteOffEdit, setSavingWriteOffEdit] = useState(false);
+
+  // Состояния для проведения списания в админке
+  const [writeOffPriceUZS, setWriteOffPriceUZS] = useState('0');
+  const [writeOffPriceUSD, setWriteOffPriceUSD] = useState('0');
 
   const router = useRouter();
 
@@ -248,11 +256,18 @@ export default function AdminDashboardPage() {
           hour: '2-digit',
           minute: '2-digit',
         });
+        const priceUzs = item.price_uzs ?? 0;
+        const priceUsd = item.price_usd ?? 0;
+        const qty = item.quantity;
         return {
           'Дата / Время': formattedDate,
           'Название запчасти': item.part_name,
           'Артикул': item.part_article,
-          'Количество': -item.quantity,
+          'Количество': -qty,
+          'Цена продажи UZS': priceUzs,
+          'Сумма продажи UZS': priceUzs * qty,
+          'Цена продажи USD': priceUsd,
+          'Сумма продажи USD': priceUsd * qty,
           'Причина / Комментарий': item.comment || '',
           'Устройство': item.device || 'Неизвестно',
           'Кто списал': item.created_by
@@ -275,6 +290,8 @@ export default function AdminDashboardPage() {
     setEditWriteOffQty(item.quantity.toString());
     setEditWriteOffComment(item.comment || '');
     setEditWriteOffBy(item.created_by);
+    setEditWriteOffPriceUZS((item.price_uzs ?? 0).toString());
+    setEditWriteOffPriceUSD((item.price_usd ?? 0).toString());
   };
 
   // Сохранение изменений в списании
@@ -293,18 +310,27 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    const salePriceUzs = parseFloat(editWriteOffPriceUZS);
+    const salePriceUsd = parseFloat(editWriteOffPriceUSD);
+    if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
+      alert('Введите корректные цены.');
+      return;
+    }
+
     setSavingWriteOffEdit(true);
     try {
       const oldQty = editingWriteOff.quantity;
       const diff = newQty - oldQty;
 
-      // 1. Обновляем запись списания в базе
+      // 1. Обновляем запись списания в базе (включая цены)
       const { error: updateLogError } = await supabase
         .from('write_offs')
         .update({
           quantity: newQty,
           comment: editWriteOffComment.trim(),
           created_by: editWriteOffBy.trim(),
+          price_uzs: salePriceUzs,
+          price_usd: salePriceUsd,
         })
         .eq('id', editingWriteOff.id);
 
@@ -776,6 +802,8 @@ export default function AdminDashboardPage() {
     setWriteOffQty('1');
     setWriteOffComment('');
     setWriteOffBy(adminName);
+    setWriteOffPriceUZS((part.price_uzs ?? 0).toString());
+    setWriteOffPriceUSD((part.price_usd ?? 0).toString());
     setShowWriteOffModal(true);
   };
 
@@ -800,11 +828,18 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    const salePriceUzs = parseFloat(writeOffPriceUZS);
+    const salePriceUsd = parseFloat(writeOffPriceUSD);
+    if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
+      alert('Введите корректные цены.');
+      return;
+    }
+
     try {
       setError(null);
       setSuccessMessage(null);
 
-      // 1. Записываем в журнал списаний с обязательным комментарием и трекингом устройства
+      // 1. Записываем в журнал списаний с обязательным комментарием, трекингом устройства и ценами
       const { error: logError } = await supabase.from('write_offs').insert([
         {
           part_id: writeOffPart.id,
@@ -814,6 +849,8 @@ export default function AdminDashboardPage() {
           comment: writeOffComment.trim(),
           created_by: writeOffBy.trim() || 'Администратор',
           device: getDeviceName(),
+          price_uzs: salePriceUzs,
+          price_usd: salePriceUsd,
         },
       ]);
 
@@ -1433,6 +1470,8 @@ export default function AdminDashboardPage() {
                     <th>Дата / Время</th>
                     <th>Запчасть / Артикул</th>
                     <th>Кол-во</th>
+                    <th>Цена продажи</th>
+                    <th>Сумма продажи</th>
                     <th>Причина / На что списано</th>
                     <th>Устройство</th>
                     <th>Кто списал</th>
@@ -1448,6 +1487,13 @@ export default function AdminDashboardPage() {
                       hour: '2-digit',
                       minute: '2-digit',
                     });
+                    const priceUzs = item.price_uzs ?? 0;
+                    const priceUsd = item.price_usd ?? 0;
+                    const formattedPriceUZS = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0 }).format(priceUzs) + ' сум';
+                    const formattedPriceUSD = '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(priceUsd);
+                    const formattedSumUZS = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 0 }).format(priceUzs * item.quantity) + ' сум';
+                    const formattedSumUSD = '$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(priceUsd * item.quantity);
+
                     return (
                       <tr key={item.id}>
                         <td style={{ color: 'var(--text-muted)', fontSize: '14px', whiteSpace: 'nowrap' }}>
@@ -1461,6 +1507,14 @@ export default function AdminDashboardPage() {
                         </td>
                         <td style={{ fontWeight: 'bold', color: 'var(--danger)', fontSize: '17px', whiteSpace: 'nowrap' }}>
                           -{item.quantity} шт.
+                        </td>
+                        <td style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 'bold' }}>{formattedPriceUZS}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>{formattedPriceUSD}</div>
+                        </td>
+                        <td style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{formattedSumUZS}</div>
+                          <div style={{ color: 'var(--text-muted)' }}>{formattedSumUSD}</div>
                         </td>
                         <td style={{ fontStyle: item.comment ? 'normal' : 'italic', color: item.comment ? 'inherit' : 'var(--text-muted)' }}>
                           {item.comment || 'комментарий отсутствует'}
@@ -1733,6 +1787,30 @@ export default function AdminDashboardPage() {
                   disabled
                   style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи (сум) *</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={writeOffPriceUZS}
+                    onChange={(e) => setWriteOffPriceUZS(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field"
+                    value={writeOffPriceUSD}
+                    onChange={(e) => setWriteOffPriceUSD(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="input-group" style={{ marginBottom: '20px' }}>
@@ -2049,6 +2127,30 @@ export default function AdminDashboardPage() {
                   disabled
                   style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
                 />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи (сум) *</label>
+                  <input
+                    type="number"
+                    className="input-field"
+                    value={editWriteOffPriceUZS}
+                    onChange={(e) => setEditWriteOffPriceUZS(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Цена продажи ($) *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="input-field"
+                    value={editWriteOffPriceUSD}
+                    onChange={(e) => setEditWriteOffPriceUSD(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <div className="input-group" style={{ marginBottom: '20px' }}>

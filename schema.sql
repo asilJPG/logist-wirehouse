@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS public.admins (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 3. Создание таблицы write_offs (журнал списаний запчастей)
+-- 3. Создание таблицы write_offs (журнал списаний запчастей / продаж)
 CREATE TABLE IF NOT EXISTS public.write_offs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     part_id UUID REFERENCES public.parts(id) ON DELETE SET NULL,
@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS public.write_offs (
     comment TEXT,
     created_by TEXT NOT NULL,
     device TEXT, -- Устройство, с которого произведено списание
+    price_uzs NUMERIC(15, 2) DEFAULT 0.00, -- Фактическая цена продажи в UZS
+    price_usd NUMERIC(10, 2) DEFAULT 0.00, -- Фактическая цена продажи в USD
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -48,6 +50,8 @@ ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS price_uzs NUMERIC(15, 2) DEFAU
 ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS price_usd NUMERIC(10, 2) DEFAULT 0.00;
 
 ALTER TABLE public.write_offs ADD COLUMN IF NOT EXISTS device TEXT;
+ALTER TABLE public.write_offs ADD COLUMN IF NOT EXISTS price_uzs NUMERIC(15, 2) DEFAULT 0.00;
+ALTER TABLE public.write_offs ADD COLUMN IF NOT EXISTS price_usd NUMERIC(10, 2) DEFAULT 0.00;
 
 ALTER TABLE public.admins ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'employee';
 UPDATE public.admins SET role = 'admin' WHERE username = 'Администратор';
