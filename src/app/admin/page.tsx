@@ -1664,10 +1664,10 @@ export default function AdminDashboardPage() {
                         </span>
                       </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                        Пароль: {adminName === 'Администратор' ? adm.password : '••••••'}
+                        Пароль: {adminRole === 'admin' ? adm.password : '••••••'}
                       </span>
                     </div>
-                    {adminName === 'Администратор' && adm.username !== 'Администратор' && adm.username !== adminName && (
+                    {adminRole === 'admin' && adm.username !== 'Администратор' && adm.username !== adminName && (
                       <button
                         onClick={() => handleDeleteAdmin(adm.id, adm.username)}
                         className="btn btn-sm btn-danger"
@@ -1681,7 +1681,7 @@ export default function AdminDashboardPage() {
               </div>
             </div>
 
-            {adminName === 'Администратор' ? (
+            {adminRole === 'admin' ? (
               <form onSubmit={handleAddAdmin} style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
                 <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '15px' }}>Добавить сотрудника</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
