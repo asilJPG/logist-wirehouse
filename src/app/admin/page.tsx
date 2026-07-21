@@ -29,6 +29,7 @@ interface WriteOff {
   quantity: number;
   comment: string | null;
   created_by: string;
+  device: string | null;
   created_at: string;
 }
 
@@ -111,6 +112,9 @@ export default function AdminDashboardPage() {
       const storedAdmin = localStorage.getItem('admin_username');
       if (!storedAdmin) {
         router.replace('/admin/login');
+      } else if (storedAdmin !== 'Администратор') {
+        // Ограничиваем доступ: только роль "Администратор" имеет доступ в админку
+        router.replace('/');
       } else {
         setAdminName(storedAdmin);
         fetchParts();
@@ -134,22 +138,16 @@ export default function AdminDashboardPage() {
     }
   };
 
-  // Загрузка списка деталей
-  const fetchParts = async (query = '') => {
+  // Загрузка списка деталей (загружаем всё один раз для живого поиска)
+  const fetchParts = async () => {
     try {
       setPartsLoading(true);
       setError(null);
 
-      let queryBuilder = supabase.from('parts').select('*');
-
-      if (query.trim()) {
-        const q = `%${query.trim()}%`;
-        queryBuilder = queryBuilder.or(`name.ilike.${q},article.ilike.${q},description.ilike.${q}`);
-      }
-
-      queryBuilder = queryBuilder.order('name', { ascending: true });
-
-      const { data, error: fetchError } = await queryBuilder;
+      const { data, error: fetchError } = await supabase
+        .from('parts')
+        .select('*')
+        .order('name', { ascending: true });
 
       if (fetchError) {
         throw fetchError;
@@ -161,6 +159,7 @@ export default function AdminDashboardPage() {
         price_usd: part.price_usd ?? 0,
         image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
       })) as Part[];
+
       setParts(list);
 
       // Синхронизируем временные поля для быстрого редактирования
@@ -201,14 +200,25 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchParts(searchQuery);
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('admin_username');
-    router.replace('/');
+    router.replace('/admin/login');
+  };
+
+  // Определение устройства
+  const getDeviceName = () => {
+    if (typeof window === 'undefined') return 'Устройство';
+    const ua = window.navigator.userAgent;
+    if (/iphone/i.test(ua)) return 'iPhone';
+    if (/ipad/i.test(ua)) return 'iPad';
+    if (/android/i.test(ua)) {
+      if (/mobile/i.test(ua)) return 'Android Phone';
+      return 'Android Tablet';
+    }
+    if (/macintosh|mac os x/i.test(ua)) return 'Mac';
+    if (/windows/i.test(ua)) return 'Windows PC';
+    if (/linux/i.test(ua)) return 'Linux PC';
+    return 'Устройство';
   };
 
   // Обработка выбора файла для обрезки
@@ -489,7 +499,7 @@ export default function AdminDashboardPage() {
       setNewImagePreviews([]);
 
       // Перезагрузка списка деталей
-      fetchParts(searchQuery);
+      fetchParts();
     } catch (err: any) {
       console.error('Ошибка добавления детали:', err);
       setError('Не удалось добавить деталь на склад. Пожалуйста, проверьте введённые данные или интернет-соединение.');
@@ -571,7 +581,7 @@ export default function AdminDashboardPage() {
 
       setSuccessMessage(`Данные запчасти "${editName}" сохранены!`);
       setEditingPart(null);
-      fetchParts(searchQuery);
+      fetchParts();
     } catch (err: any) {
       console.error('Ошибка обновления детали:', err);
       setError('Не удалось сохранить изменения. Пожалуйста, проверьте введённые данные или интернет-соединение.');
@@ -665,19 +675,25 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    if (!writeOffComment.trim()) {
+      alert('Пожалуйста, укажите причину списания детали (комментарий).');
+      return;
+    }
+
     try {
       setError(null);
       setSuccessMessage(null);
 
-      // 1. Записываем в журнал списаний
+      // 1. Записываем в журнал списаний с обязательным комментарием и трекингом устройства
       const { error: logError } = await supabase.from('write_offs').insert([
         {
           part_id: writeOffPart.id,
           part_name: writeOffPart.name,
           part_article: writeOffPart.article,
           quantity: qtyToSubtract,
-          comment: writeOffComment.trim() || null,
+          comment: writeOffComment.trim(),
           created_by: writeOffBy.trim() || 'Администратор',
+          device: getDeviceName(),
         },
       ]);
 
@@ -696,7 +712,7 @@ export default function AdminDashboardPage() {
       setShowWriteOffModal(false);
 
       // 3. Перезагружаем списки
-      fetchParts(searchQuery);
+      fetchParts();
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка при списании:', err);
@@ -721,12 +737,23 @@ export default function AdminDashboardPage() {
       }
 
       setSuccessMessage(`Запчасть "${name}" успешно удалена.`);
-      fetchParts(searchQuery);
+      fetchParts();
     } catch (err: any) {
       console.error('Ошибка удаления детали:', err);
       setError('Не удалось удалить деталь со склада. Проверьте подключение к интернету.');
     }
   };
+
+  // Мгновенная фильтрация списка запчастей в админке по мере ввода (как на главной)
+  const filteredParts = parts.filter((part) => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      part.name.toLowerCase().includes(q) ||
+      part.article.toLowerCase().includes(q) ||
+      (part.description && part.description.toLowerCase().includes(q))
+    );
+  });
 
   if (authLoading) {
     return <div className="loading-spinner">Проверка прав доступа...</div>;
@@ -802,27 +829,24 @@ export default function AdminDashboardPage() {
       {/* Содержимое вкладок */}
       {activeTab === 'parts' ? (
         <div className="admin-grid">
-          {/* Левая часть: Список товаров и Поиск */}
+          {/* Левая часть: Список товаров и Живой поиск */}
           <div className="admin-list-container">
             <div className="search-container" style={{ padding: '16px 20px', marginBottom: '20px' }}>
-              <form onSubmit={handleSearchSubmit} className="search-box">
+              <div className="search-box">
                 <input
                   type="text"
                   className="input-field search-input"
-                  style={{ fontSize: '16px', padding: '10px 15px' }}
-                  placeholder="Быстрый поиск деталей на складе..."
+                  style={{ width: '100%', fontSize: '16px', padding: '10px 15px' }}
+                  placeholder="Введите название детали или артикул..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <button type="submit" className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '16px' }}>
-                  Найти
-                </button>
-              </form>
+              </div>
             </div>
 
             {partsLoading ? (
               <div className="loading-spinner">Загрузка товаров...</div>
-            ) : parts.length === 0 ? (
+            ) : filteredParts.length === 0 ? (
               <div className="no-results">Склад пуст или ничего не найдено.</div>
             ) : (
               <>
@@ -840,7 +864,7 @@ export default function AdminDashboardPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {parts.map((part) => {
+                      {filteredParts.map((part) => {
                         const firstImg = getFirstPartImage(part);
                         const isPriceChanged = 
                           tempPricesUZS[part.id] !== (part.price_uzs ?? 0).toString() ||
@@ -966,7 +990,7 @@ export default function AdminDashboardPage() {
                                   className="btn btn-sm"
                                   style={{ minHeight: 'auto', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
                                   disabled={part.quantity <= 0}
-                                  title="Списать со склада..."
+                                  title="Списания..."
                                 >
                                   Списать
                                 </button>
@@ -995,7 +1019,7 @@ export default function AdminDashboardPage() {
 
                 {/* Карточки запчастей для Мобильных */}
                 <div className="parts-cards">
-                  {parts.map((part) => {
+                  {filteredParts.map((part) => {
                     const firstImg = getFirstPartImage(part);
                     return (
                       <div key={part.id} className="part-card">
@@ -1279,6 +1303,7 @@ export default function AdminDashboardPage() {
                     <th>Запчасть / Артикул</th>
                     <th>Кол-во</th>
                     <th>Причина / На что списано</th>
+                    <th>Устройство</th>
                     <th>Кто списал</th>
                   </tr>
                 </thead>
@@ -1307,6 +1332,9 @@ export default function AdminDashboardPage() {
                         </td>
                         <td style={{ fontStyle: item.comment ? 'normal' : 'italic', color: item.comment ? 'inherit' : 'var(--text-muted)' }}>
                           {item.comment || 'комментарий отсутствует'}
+                        </td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                          {item.device || 'Неизвестно'}
                         </td>
                         <td style={{ fontWeight: '600' }}>{item.created_by}</td>
                       </tr>
@@ -1555,14 +1583,26 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              <div className="input-group" style={{ marginBottom: '15px' }}>
+                <label className="input-label">Устройство фиксации</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={getDeviceName()}
+                  disabled
+                  style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                />
+              </div>
+
               <div className="input-group" style={{ marginBottom: '20px' }}>
-                <label className="input-label">Причина / На что списано</label>
+                <label className="input-label">Причина / На что списано *</label>
                 <textarea
                   className="input-field"
-                  placeholder="На что списана запчасть (автомобиль, причина)"
+                  placeholder="Обязательно укажите причину списания детали..."
                   style={{ minHeight: '80px', fontFamily: 'inherit', padding: '8px 12px' }}
                   value={writeOffComment}
                   onChange={(e) => setWriteOffComment(e.target.value)}
+                  required
                 />
               </div>
 

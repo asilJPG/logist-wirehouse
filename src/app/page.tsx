@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 interface Part {
@@ -15,13 +16,22 @@ interface Part {
 }
 
 export default function HomePage() {
+  const [adminName, setAdminName] = useState<string>('');
+  const [authLoading, setAuthLoading] = useState(true);
   const [parts, setParts] = useState<Part[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [selectedPart, setSelectedPart] = useState<Part | null>(null);
   const [activeImgIndex, setActiveImgIndex] = useState(0);
-  const [shareCopied, setShareCopied] = useState<string | null>(null);
+
+  // Состояния для списания
+  const [showWriteOffModal, setShowWriteOffModal] = useState(false);
+  const [writeOffPart, setWriteOffPart] = useState<Part | null>(null);
+  const [writeOffQty, setWriteOffQty] = useState('1');
+  const [writeOffComment, setWriteOffComment] = useState('');
+
+  const router = useRouter();
 
   // Функция для загрузки всех запчастей со склада
   const fetchParts = async () => {
@@ -45,6 +55,7 @@ export default function HomePage() {
         price_usd: part.price_usd ?? 0,
         image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
       })) as Part[];
+
       setParts(list);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
@@ -54,53 +65,25 @@ export default function HomePage() {
     }
   };
 
-  // Загрузка данных при монтировании и проверка ссылки
+  // Проверка сессии при загрузке страницы
   useEffect(() => {
-    fetchParts();
+    const checkAuth = () => {
+      const storedAdmin = localStorage.getItem('admin_username');
+      if (!storedAdmin) {
+        router.replace('/admin/login');
+      } else {
+        setAdminName(storedAdmin);
+        fetchParts();
+        setAuthLoading(false);
+      }
+    };
 
-    // Проверяем параметр 'part' в ссылке
-    const params = new URLSearchParams(window.location.search);
-    const partId = params.get('part');
-    if (partId) {
-      const fetchSinglePart = async () => {
-        try {
-          const { data, error: singleError } = await supabase
-            .from('parts')
-            .select('*')
-            .eq('id', partId)
-            .single();
-          
-          if (!singleError && data) {
-            const part = data as any;
-            setSelectedPart({
-              ...part,
-              price_uzs: part.price_uzs ?? part.price ?? 0,
-              price_usd: part.price_usd ?? 0,
-              image_urls: part.image_urls ?? (part.image_url ? [part.image_url] : [])
-            } as Part);
-            setActiveImgIndex(0);
-          }
-        } catch (err) {
-          console.error('Ошибка загрузки детали по ссылке:', err);
-        }
-      };
-      fetchSinglePart();
-    }
-  }, []);
+    checkAuth();
+  }, [router]);
 
-  // Копирование ссылки на деталь в буфер обмена
-  const handleShare = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    const shareUrl = `${window.location.origin}/?part=${id}`;
-    navigator.clipboard
-      .writeText(shareUrl)
-      .then(() => {
-        setShareCopied(id);
-        setTimeout(() => setShareCopied(null), 2000);
-      })
-      .catch((err) => {
-        console.error('Ошибка при копировании ссылки:', err);
-      });
+  const handleLogout = () => {
+    localStorage.removeItem('admin_username');
+    router.replace('/admin/login');
   };
 
   // Открытие детальной карточки запчасти
@@ -118,6 +101,90 @@ export default function HomePage() {
   const formatPriceUSD = (price: number) => {
     const formatted = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price);
     return `$${formatted}`;
+  };
+
+  // Определение устройства
+  const getDeviceName = () => {
+    if (typeof window === 'undefined') return 'Устройство';
+    const ua = window.navigator.userAgent;
+    if (/iphone/i.test(ua)) return 'iPhone';
+    if (/ipad/i.test(ua)) return 'iPad';
+    if (/android/i.test(ua)) {
+      if (/mobile/i.test(ua)) return 'Android Phone';
+      return 'Android Tablet';
+    }
+    if (/macintosh|mac os x/i.test(ua)) return 'Mac';
+    if (/windows/i.test(ua)) return 'Windows PC';
+    if (/linux/i.test(ua)) return 'Linux PC';
+    return 'Устройство';
+  };
+
+  // Инициация списания
+  const handleOpenWriteOffModal = (part: Part) => {
+    setWriteOffPart(part);
+    setWriteOffQty('1');
+    setWriteOffComment('');
+    setShowWriteOffModal(true);
+  };
+
+  // Проведение списания
+  const handlePerformWriteOff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!writeOffPart) return;
+
+    const qtyToSubtract = parseInt(writeOffQty, 10);
+    if (isNaN(qtyToSubtract) || qtyToSubtract <= 0) {
+      alert('Введите корректное количество для списания.');
+      return;
+    }
+
+    if (qtyToSubtract > writeOffPart.quantity) {
+      alert(`Недостаточно товара на складе. Доступно для списания: ${writeOffPart.quantity} шт.`);
+      return;
+    }
+
+    if (!writeOffComment.trim()) {
+      alert('Пожалуйста, укажите комментарий (на что списана деталь).');
+      return;
+    }
+
+    try {
+      setError(null);
+
+      // 1. Записываем в журнал списаний с трекингом ФИО, времени и устройства
+      const { error: logError } = await supabase.from('write_offs').insert([
+        {
+          part_id: writeOffPart.id,
+          part_name: writeOffPart.name,
+          part_article: writeOffPart.article,
+          quantity: qtyToSubtract,
+          comment: writeOffComment.trim(),
+          created_by: adminName,
+          device: getDeviceName(),
+        },
+      ]);
+
+      if (logError) throw logError;
+
+      // 2. Списываем количество
+      const newQty = writeOffPart.quantity - qtyToSubtract;
+      const { error: updateError } = await supabase
+        .from('parts')
+        .update({ quantity: newQty })
+        .eq('id', writeOffPart.id);
+
+      if (updateError) throw updateError;
+
+      alert(`Успешно списано ${qtyToSubtract} шт. детали "${writeOffPart.name}"`);
+      setShowWriteOffModal(false);
+      setSelectedPart(null); // закрываем окно просмотра
+
+      // 3. Перезагружаем список
+      fetchParts();
+    } catch (err: any) {
+      console.error('Ошибка списания детали:', err);
+      alert('Не удалось провести списание. Проверьте интернет-соединение.');
+    }
   };
 
   // Мгновенная фильтрация списка запчастей на клиенте по мере ввода
@@ -150,8 +217,32 @@ export default function HomePage() {
     setActiveImgIndex((prev) => (prev === imgLength - 1 ? 0 : prev + 1));
   };
 
+  if (authLoading) {
+    return <div className="loading-spinner">Проверка доступа...</div>;
+  }
+
   return (
     <div>
+      {/* Динамическая Шапка */}
+      <header className="header" style={{ margin: '-20px -20px 25px -20px', padding: '15px 20px', backgroundColor: 'var(--card-bg)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ fontSize: '22px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          📦 Склад Запчастей
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '15px', color: 'var(--text-muted)' }}>
+            Сотрудник: <strong style={{ color: 'var(--foreground)' }}>{adminName}</strong>
+          </span>
+          {adminName === 'Администратор' && (
+            <button onClick={() => router.push('/admin')} className="btn btn-secondary btn-sm" style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '14px' }}>
+              ⚙️ Панель управления
+            </button>
+          )}
+          <button onClick={handleLogout} className="btn btn-danger btn-sm" style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '14px' }}>
+            🚪 Выйти
+          </button>
+        </div>
+      </header>
+
       <div style={{ marginBottom: '25px', textAlign: 'center' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '10px' }}>Наличие запчастей на складе</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '18px' }}>
@@ -165,7 +256,7 @@ export default function HomePage() {
           <input
             type="text"
             className="input-field search-input"
-            placeholder="Поиск по названию, артикулу или бренду"
+            placeholder="Введите название детали или артикул"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ width: '100%', fontSize: '18px', padding: '12px 18px', borderRadius: '8px' }}
@@ -217,7 +308,7 @@ export default function HomePage() {
                     <span className="part-card-label">Артикул:</span>
                     <span className="part-card-value" style={{ fontFamily: 'monospace' }}>{part.article}</span>
                   </div>
-                  <div className="part-card-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                  <div className="part-card-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--primary)' }}>
                         {formatPriceUZS(part.price_uzs)}
@@ -227,17 +318,21 @@ export default function HomePage() {
                       </span>
                     </div>
                     
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: 'auto' }}>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        style={{ minHeight: '30px', padding: '4px 8px', fontSize: '13px' }}
-                        title="Скопировать ссылку"
-                        onClick={(e) => handleShare(e, part.id)}
-                      >
-                        {shareCopied === part.id ? '✓' : '🔗'}
-                      </button>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: 'auto' }}>
                       {part.quantity > 0 ? (
-                        <span className="status-badge status-in-stock">{part.quantity} шт.</span>
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            style={{ minHeight: '30px', padding: '4px 10px', fontSize: '13px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenWriteOffModal(part);
+                            }}
+                          >
+                            Списать
+                          </button>
+                          <span className="status-badge status-in-stock">{part.quantity} шт.</span>
+                        </>
                       ) : (
                         <span className="status-badge status-out-of-stock">Нет</span>
                       )}
@@ -420,13 +515,17 @@ export default function HomePage() {
                     </div>
                   </div>
                   
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    style={{ minHeight: '38px', padding: '8px 16px', fontSize: '14px' }}
-                    onClick={(e) => handleShare(e, selectedPart.id)}
-                  >
-                    {shareCopied === selectedPart.id ? '✓ Ссылка скопирована' : '🔗 Поделиться карточкой'}
-                  </button>
+                  {selectedPart.quantity > 0 ? (
+                    <button
+                      className="btn"
+                      style={{ minHeight: '38px', padding: '8px 16px', fontSize: '14px', backgroundColor: '#f59e0b', color: 'white', border: 'none' }}
+                      onClick={() => handleOpenWriteOffModal(selectedPart)}
+                    >
+                      Списания со склада
+                    </button>
+                  ) : (
+                    <span className="status-badge status-out-of-stock" style={{ padding: '8px 16px' }}>Нет</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -441,6 +540,100 @@ export default function HomePage() {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно списания детали */}
+      {showWriteOffModal && writeOffPart && (
+        <div className="modal-overlay" style={{ zIndex: 1900 }}>
+          <div className="modal-content" style={{ maxWidth: '450px', padding: '24px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Списание запчасти</span>
+              <button onClick={() => setShowWriteOffModal(false)} className="modal-close">
+                &times;
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.01)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Деталь для списания:</p>
+              <strong style={{ fontSize: '16px', display: 'block', marginBottom: '4px' }}>{writeOffPart.name}</strong>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'monospace', display: 'block' }}>
+                Артикул: {writeOffPart.article}
+              </span>
+              <span style={{ fontSize: '14px', marginTop: '8px', display: 'block', fontWeight: 'bold' }}>
+                Доступно на складе: {writeOffPart.quantity} шт.
+              </span>
+            </div>
+
+            <form onSubmit={handlePerformWriteOff}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Кол-во списания *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={writeOffPart.quantity}
+                    className="input-field"
+                    value={writeOffQty}
+                    onChange={(e) => setWriteOffQty(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                <div className="input-group">
+                  <label className="input-label">Кто списывает</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={adminName}
+                    disabled
+                    style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '15px' }}>
+                <label className="input-label">Устройство фиксации</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={getDeviceName()}
+                  disabled
+                  style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                />
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '20px' }}>
+                <label className="input-label">Причина / На что списано *</label>
+                <textarea
+                  className="input-field"
+                  placeholder="Обязательно напишите, на какую машину или кому выдана деталь..."
+                  style={{ minHeight: '80px', fontFamily: 'inherit', padding: '8px 12px' }}
+                  value={writeOffComment}
+                  onChange={(e) => setWriteOffComment(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowWriteOffModal(false)}
+                  className="btn btn-secondary"
+                  style={{ minHeight: '40px' }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-danger"
+                  style={{ minHeight: '40px', backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: 'white' }}
+                >
+                  Подтвердить списание
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

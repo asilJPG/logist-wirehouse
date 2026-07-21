@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   useEffect(() => {
     const storedAdmin = localStorage.getItem('admin_username');
     if (storedAdmin) {
-      router.replace('/admin');
+      router.replace('/');
     } else {
       setLoading(false);
     }
@@ -56,8 +56,8 @@ export default function AdminLoginPage() {
       // Сохраняем имя вошедшего сотрудника в локальное хранилище для сессии
       localStorage.setItem('admin_username', adminUser.username);
 
-      // Перенаправляем в панель управления
-      router.push('/admin');
+      // Перенаправляем на главную
+      router.push('/');
     } catch (err: any) {
       console.error('Ошибка входа:', err);
       setError('Не удалось войти. Проверьте пароль или подключение к интернету.');

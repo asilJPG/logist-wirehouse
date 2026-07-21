@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS public.parts (
     quantity INTEGER NOT NULL DEFAULT 0,
     price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
     description TEXT,
-    image_url TEXT, -- Ссылка на фотографию запчасти в Supabase Storage
+    image_urls TEXT[] DEFAULT '{}', -- Ссылка на фотографии запчасти в Supabase Storage
+    price_uzs NUMERIC(15, 2) DEFAULT 0.00,
+    price_usd NUMERIC(10, 2) DEFAULT 0.00,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -31,13 +33,20 @@ CREATE TABLE IF NOT EXISTS public.write_offs (
     quantity INTEGER NOT NULL,
     comment TEXT,
     created_by TEXT NOT NULL,
+    device TEXT, -- Устройство, с которого произведено списание
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Если таблица parts уже создана, удалим ненужное поле location и brand, и добавим нужное image_url:
+-- Обновление существующих таблиц (миграция колонок)
 ALTER TABLE public.parts DROP COLUMN IF EXISTS location;
 ALTER TABLE public.parts DROP COLUMN IF EXISTS brand;
-ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.parts DROP COLUMN IF EXISTS price;
+ALTER TABLE public.parts DROP COLUMN IF EXISTS image_url;
+ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS image_urls TEXT[] DEFAULT '{}';
+ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS price_uzs NUMERIC(15, 2) DEFAULT 0.00;
+ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS price_usd NUMERIC(10, 2) DEFAULT 0.00;
+
+ALTER TABLE public.write_offs ADD COLUMN IF NOT EXISTS device TEXT;
 
 -- Отключение RLS для новой таблицы списаний
 ALTER TABLE public.write_offs DISABLE ROW LEVEL SECURITY;
