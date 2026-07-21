@@ -1654,7 +1654,7 @@ export default function AdminDashboardPage() {
             <div style={{ marginBottom: '25px' }}>
               <h4 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px' }}>Список сотрудников</h4>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px', backgroundColor: 'var(--background)' }}>
-                {admins.map((adm) => (
+                {admins.filter((adm) => adm.username !== 'Администратор').map((adm) => (
                   <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--card-bg)', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', flexGrow: 1, justifyContent: 'space-between', alignItems: 'center', marginRight: '10px' }}>
                       <div>
