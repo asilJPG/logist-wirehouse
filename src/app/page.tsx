@@ -17,6 +17,7 @@ interface Part {
 
 export default function HomePage() {
   const [adminName, setAdminName] = useState<string>('');
+  const [adminRole, setAdminRole] = useState<string>('');
   const [authLoading, setAuthLoading] = useState(true);
   const [parts, setParts] = useState<Part[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,10 +70,12 @@ export default function HomePage() {
   useEffect(() => {
     const checkAuth = () => {
       const storedAdmin = localStorage.getItem('admin_username');
+      const storedRole = localStorage.getItem('admin_role') || '';
       if (!storedAdmin) {
         router.replace('/admin/login');
       } else {
         setAdminName(storedAdmin);
+        setAdminRole(storedRole);
         fetchParts();
         setAuthLoading(false);
       }
@@ -83,6 +86,7 @@ export default function HomePage() {
 
   const handleLogout = () => {
     localStorage.removeItem('admin_username');
+    localStorage.removeItem('admin_role');
     router.replace('/admin/login');
   };
 
@@ -232,7 +236,7 @@ export default function HomePage() {
           <span style={{ fontSize: '15px', color: 'var(--text-muted)' }}>
             Сотрудник: <strong style={{ color: 'var(--foreground)' }}>{adminName}</strong>
           </span>
-          {adminName === 'Администратор' && (
+          {(adminName === 'Администратор' || adminRole === 'admin' || adminRole === 'manager') && (
             <button onClick={() => router.push('/admin')} className="btn btn-secondary btn-sm" style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '14px' }}>
               ⚙️ Панель управления
             </button>

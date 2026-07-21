@@ -19,6 +19,7 @@ interface AdminUser {
   id: string;
   username: string;
   password: string;
+  role: string | null;
 }
 
 interface WriteOff {
@@ -35,6 +36,7 @@ interface WriteOff {
 
 export default function AdminDashboardPage() {
   const [adminName, setAdminName] = useState<string>('');
+  const [adminRole, setAdminRole] = useState<string>('');
   const [authLoading, setAuthLoading] = useState(true);
   const [parts, setParts] = useState<Part[]>([]);
   const [partsLoading, setPartsLoading] = useState(true);
@@ -61,6 +63,7 @@ export default function AdminDashboardPage() {
   const [showAdminsModal, setShowAdminsModal] = useState(false);
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminRole, setNewAdminRole] = useState<'manager' | 'employee'>('employee');
   const [addingAdmin, setAddingAdmin] = useState(false);
 
   // Состояние для формы добавления товара
@@ -110,15 +113,19 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const checkAuth = () => {
       const storedAdmin = localStorage.getItem('admin_username');
+      const storedRole = localStorage.getItem('admin_role') || '';
       if (!storedAdmin) {
         router.replace('/admin/login');
-      } else if (storedAdmin !== 'Администратор') {
-        // Ограничиваем доступ: только роль "Администратор" имеет доступ в админку
+      } else if (storedRole !== 'admin' && storedRole !== 'manager') {
+        // Доступ только для Администратора и Менеджера склада
         router.replace('/');
       } else {
         setAdminName(storedAdmin);
+        setAdminRole(storedRole);
         fetchParts();
-        fetchAdmins();
+        if (storedRole === 'admin') {
+          fetchAdmins();
+        }
         fetchWriteOffs();
         setAuthLoading(false);
       }
@@ -202,6 +209,7 @@ export default function AdminDashboardPage() {
 
   const handleLogout = () => {
     localStorage.removeItem('admin_username');
+    localStorage.removeItem('admin_role');
     router.replace('/admin/login');
   };
 
@@ -393,6 +401,7 @@ export default function AdminDashboardPage() {
         {
           username: newAdminUsername.trim(),
           password: newAdminPassword.trim(),
+          role: newAdminRole,
         },
       ]);
 
@@ -401,6 +410,7 @@ export default function AdminDashboardPage() {
       alert(`Сотрудник "${newAdminUsername}" успешно создан!`);
       setNewAdminUsername('');
       setNewAdminPassword('');
+      setNewAdminRole('employee');
       fetchAdmins();
     } catch (err: any) {
       console.error('Ошибка при добавлении сотрудника:', err);
@@ -776,9 +786,11 @@ export default function AdminDashboardPage() {
           <p style={{ color: 'var(--text-muted)' }}>Сотрудник: <strong>{adminName}</strong></p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button onClick={() => setShowAdminsModal(true)} className="btn btn-secondary">
-            👥 Доступы сотрудников
-          </button>
+          {adminRole === 'admin' && (
+            <button onClick={() => setShowAdminsModal(true)} className="btn btn-secondary">
+              👥 Доступы сотрудников
+            </button>
+          )}
           <button onClick={handleLogout} className="btn btn-danger">
             🚪 Выйти
           </button>
@@ -1645,7 +1657,12 @@ export default function AdminDashboardPage() {
                 {admins.map((adm) => (
                   <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--card-bg)', borderRadius: '4px' }}>
                     <div style={{ display: 'flex', flexGrow: 1, justifyContent: 'space-between', alignItems: 'center', marginRight: '10px' }}>
-                      <strong style={{ fontSize: '15px' }}>{adm.username}</strong>
+                      <div>
+                        <strong style={{ fontSize: '15px' }}>{adm.username}</strong>
+                        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                          {adm.role === 'admin' ? '(Администратор)' : adm.role === 'manager' ? '(Менеджер)' : '(Сотрудник)'}
+                        </span>
+                      </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                         Пароль: {adminName === 'Администратор' ? adm.password : '••••••'}
                       </span>
@@ -1692,7 +1709,20 @@ export default function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="modal-actions" style={{ marginTop: '10px' }}>
+                <div className="input-group" style={{ marginTop: '10px' }}>
+                  <label className="input-label">Роль сотрудника *</label>
+                  <select
+                    className="input-field"
+                    value={newAdminRole}
+                    onChange={(e) => setNewAdminRole(e.target.value as 'manager' | 'employee')}
+                    style={{ padding: '8px 12px', fontSize: '16px' }}
+                  >
+                    <option value="employee">Обычный сотрудник (только списание с главной)</option>
+                    <option value="manager">Сотрудник склада / Менеджер (доступ в админку)</option>
+                  </select>
+                </div>
+
+                <div className="modal-actions" style={{ marginTop: '15px' }}>
                   <button
                     type="button"
                     onClick={() => setShowAdminsModal(false)}

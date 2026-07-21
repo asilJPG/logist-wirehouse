@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
       // Ищем сотрудника с таким паролем в таблице admins
       const { data: adminsData, error: dbError } = await supabase
         .from('admins')
-        .select('username')
+        .select('username, role')
         .eq('password', enteredPassword);
 
       if (dbError) {
@@ -53,8 +53,9 @@ export default function AdminLoginPage() {
 
       const adminUser = adminsData[0];
 
-      // Сохраняем имя вошедшего сотрудника в локальное хранилище для сессии
+      // Сохраняем имя вошедшего сотрудника и его роль в локальное хранилище для сессии
       localStorage.setItem('admin_username', adminUser.username);
+      localStorage.setItem('admin_role', adminUser.role ?? (adminUser.username === 'Администратор' ? 'admin' : 'employee'));
 
       // Перенаправляем на главную
       router.push('/');

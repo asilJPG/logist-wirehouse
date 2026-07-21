@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS public.admins (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL UNIQUE,
     password TEXT NOT NULL,
+    role TEXT DEFAULT 'employee', -- Роль: admin (Администратор), manager (Менеджер), employee (Сотрудник)
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -48,6 +49,9 @@ ALTER TABLE public.parts ADD COLUMN IF NOT EXISTS price_usd NUMERIC(10, 2) DEFAU
 
 ALTER TABLE public.write_offs ADD COLUMN IF NOT EXISTS device TEXT;
 
+ALTER TABLE public.admins ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'employee';
+UPDATE public.admins SET role = 'admin' WHERE username = 'Администратор';
+
 -- Отключение RLS для новой таблицы списаний
 ALTER TABLE public.write_offs DISABLE ROW LEVEL SECURITY;
 
@@ -73,6 +77,6 @@ CREATE INDEX IF NOT EXISTS parts_article_idx ON public.parts (article);
 CREATE INDEX IF NOT EXISTS write_offs_created_at_idx ON public.write_offs (created_at DESC);
 
 -- 6. Создание стандартного администратора (логин по паролю: 12345)
-INSERT INTO public.admins (username, password)
-VALUES ('Администратор', '12345')
-ON CONFLICT (username) DO NOTHING;
+INSERT INTO public.admins (username, password, role)
+VALUES ('Администратор', '12345', 'admin')
+ON CONFLICT (username) DO UPDATE SET role = 'admin';
