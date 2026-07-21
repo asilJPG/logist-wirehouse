@@ -330,7 +330,7 @@ export default function HomePage() {
                       <span style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--primary)' }}>
                         {formatPriceUZS(part.price_uzs)}
                       </span>
-                      <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                      <span style={{ fontSize: '19px', fontWeight: 'bold', color: 'var(--primary)' }}>
                         {formatPriceUSD(part.price_usd)}
                       </span>
                     </div>
@@ -527,7 +527,7 @@ export default function HomePage() {
                     <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--primary)', lineHeight: '1.1' }}>
                       {formatPriceUZS(selectedPart.price_uzs)}
                     </div>
-                    <div style={{ fontSize: '18px', color: 'var(--text-muted)', fontWeight: 'bold' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--primary)', lineHeight: '1.1' }}>
                       {formatPriceUSD(selectedPart.price_usd)}
                     </div>
                   </div>
