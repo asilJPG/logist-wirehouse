@@ -374,15 +374,18 @@ export default function AdminDashboardPage() {
     if (!confirmCancel) return;
 
     try {
-      // 1. Возвращаем детали на склад (если деталь существует)
+      let partExists = false;
+
+      // 1. Проверяем, существует ли деталь на складе
       if (item.part_id) {
         const { data: partData, error: partError } = await supabase
           .from('parts')
-          .select('quantity')
+          .select('id, quantity')
           .eq('id', item.part_id)
           .single();
 
         if (!partError && partData) {
+          partExists = true;
           const restoredQty = (partData.quantity ?? 0) + item.quantity;
           const { error: restoreError } = await supabase
             .from('parts')
@@ -390,12 +393,38 @@ export default function AdminDashboardPage() {
             .eq('id', item.part_id);
 
           if (restoreError) throw restoreError;
-        } else {
-          console.warn('Деталь не найдена на складе. Списание будет удалено без восстановления остатков.');
         }
       }
 
-      // 2. Удаляем запись списания из базы
+      // 2. Если товар был удалён фулл со склада, воссоздаем его заново!
+      if (!partExists) {
+        const { data: newPart, error: insertPartError } = await supabase
+          .from('parts')
+          .insert({
+            name: item.part_name,
+            article: item.part_article,
+            quantity: item.quantity,
+            price_uzs: item.price_uzs ?? 0,
+            price_usd: item.price_usd ?? 0,
+            description: 'Товар воссоздан автоматически при отмене списания',
+            image_urls: []
+          })
+          .select()
+          .single();
+
+        if (insertPartError) throw insertPartError;
+
+        // Связываем другие прошлые списания этого товара с новым ID детали
+        if (newPart) {
+          await supabase
+            .from('write_offs')
+            .update({ part_id: newPart.id })
+            .eq('part_article', item.part_article)
+            .is('part_id', null);
+        }
+      }
+
+      // 3. Удаляем саму запись списания из базы
       const { error: deleteError } = await supabase
         .from('write_offs')
         .delete()
@@ -403,7 +432,11 @@ export default function AdminDashboardPage() {
 
       if (deleteError) throw deleteError;
 
-      alert('Списание успешно отменено, остатки на складе восстановлены!');
+      alert(
+        partExists
+          ? 'Списание успешно отменено, остатки на складе восстановлены!'
+          : 'Списание отменено! Так как товар был ранее удален, он автоматически воссоздан на складе с возвращенным количеством.'
+      );
       fetchParts();
       fetchWriteOffs();
     } catch (err: any) {
