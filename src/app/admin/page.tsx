@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
 
 interface Part {
   id: string;
@@ -106,6 +107,13 @@ export default function AdminDashboardPage() {
   const [tempPricesUZS, setTempPricesUZS] = useState<{ [key: string]: string }>({});
   const [tempPricesUSD, setTempPricesUSD] = useState<{ [key: string]: string }>({});
   const [tempQuantities, setTempQuantities] = useState<{ [key: string]: string }>({});
+
+  // Состояния для редактирования записи списания
+  const [editingWriteOff, setEditingWriteOff] = useState<WriteOff | null>(null);
+  const [editWriteOffQty, setEditWriteOffQty] = useState('');
+  const [editWriteOffComment, setEditWriteOffComment] = useState('');
+  const [editWriteOffBy, setEditWriteOffBy] = useState('');
+  const [savingWriteOffEdit, setSavingWriteOffEdit] = useState(false);
 
   const router = useRouter();
 
@@ -227,6 +235,108 @@ export default function AdminDashboardPage() {
     if (/windows/i.test(ua)) return 'Windows PC';
     if (/linux/i.test(ua)) return 'Linux PC';
     return 'Устройство';
+  };
+
+  // Экспорт журнала списаний в Excel
+  const handleExportToExcel = () => {
+    try {
+      const dataToExport = writeoffs.map((item) => {
+        const formattedDate = new Date(item.created_at).toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return {
+          'Дата / Время': formattedDate,
+          'Название запчасти': item.part_name,
+          'Артикул': item.part_article,
+          'Количество': -item.quantity,
+          'Причина / Комментарий': item.comment || '',
+          'Устройство': item.device || 'Неизвестно',
+          'Кто списал': item.created_by
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Списания');
+      XLSX.writeFile(workbook, `Журнал_списаний_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      console.error('Ошибка экспорта в Excel:', err);
+      alert('Не удалось экспортировать файл в Excel.');
+    }
+  };
+
+  // Открытие модалки редактирования списания
+  const handleOpenEditWriteOff = (item: WriteOff) => {
+    setEditingWriteOff(item);
+    setEditWriteOffQty(item.quantity.toString());
+    setEditWriteOffComment(item.comment || '');
+    setEditWriteOffBy(item.created_by);
+  };
+
+  // Сохранение изменений в списании
+  const handleSaveWriteOffEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWriteOff) return;
+
+    const newQty = parseInt(editWriteOffQty, 10);
+    if (isNaN(newQty) || newQty <= 0) {
+      alert('Введите корректное количество.');
+      return;
+    }
+
+    if (!editWriteOffComment.trim()) {
+      alert('Укажите причину списания.');
+      return;
+    }
+
+    setSavingWriteOffEdit(true);
+    try {
+      const oldQty = editingWriteOff.quantity;
+      const diff = newQty - oldQty;
+
+      // 1. Обновляем запись списания в базе
+      const { error: updateLogError } = await supabase
+        .from('write_offs')
+        .update({
+          quantity: newQty,
+          comment: editWriteOffComment.trim(),
+          created_by: editWriteOffBy.trim(),
+        })
+        .eq('id', editingWriteOff.id);
+
+      if (updateLogError) throw updateLogError;
+
+      // 2. Корректируем остаток на складе
+      if (diff !== 0 && editingWriteOff.part_id) {
+        const { data: partData, error: partError } = await supabase
+          .from('parts')
+          .select('quantity')
+          .eq('id', editingWriteOff.part_id)
+          .single();
+
+        if (!partError && partData) {
+          const newPartQty = (partData.quantity ?? 0) - diff;
+          await supabase
+            .from('parts')
+            .update({ quantity: newPartQty >= 0 ? newPartQty : 0 })
+            .eq('id', editingWriteOff.part_id);
+        }
+      }
+
+      alert('Списание успешно изменено!');
+      setEditingWriteOff(null);
+      fetchParts();
+      fetchWriteOffs();
+    } catch (err: any) {
+      console.error('Ошибка сохранения списания:', err);
+      alert('Не удалось обновить запись списания.');
+    } finally {
+      setSavingWriteOffEdit(false);
+    }
   };
 
   // Обработка выбора файла для обрезки
@@ -1294,9 +1404,18 @@ export default function AdminDashboardPage() {
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <h3 style={{ fontSize: '22px', margin: 0 }}>История списаний запчастей</h3>
-            <button onClick={fetchWriteOffs} className="btn btn-secondary btn-sm" style={{ minHeight: '34px' }}>
-              🔄 Обновить журнал
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={handleExportToExcel}
+                className="btn btn-success btn-sm"
+                style={{ minHeight: '34px', backgroundColor: '#10b981', borderColor: '#10b981', color: 'white' }}
+              >
+                📥 Скачать Excel
+              </button>
+              <button onClick={fetchWriteOffs} className="btn btn-secondary btn-sm" style={{ minHeight: '34px' }}>
+                🔄 Обновить журнал
+              </button>
+            </div>
           </div>
 
           {writeoffsLoading ? (
@@ -1317,6 +1436,7 @@ export default function AdminDashboardPage() {
                     <th>Причина / На что списано</th>
                     <th>Устройство</th>
                     <th>Кто списал</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1349,6 +1469,15 @@ export default function AdminDashboardPage() {
                           {item.device || 'Неизвестно'}
                         </td>
                         <td style={{ fontWeight: '600' }}>{item.created_by}</td>
+                        <td>
+                          <button
+                            onClick={() => handleOpenEditWriteOff(item)}
+                            className="btn btn-sm btn-secondary"
+                            style={{ minHeight: 'auto', padding: '4px 10px', fontSize: '13px' }}
+                          >
+                            Изменить
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1862,6 +1991,97 @@ export default function AdminDashboardPage() {
                 Готово
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно редактирования списания */}
+      {editingWriteOff && (
+        <div className="modal-overlay" style={{ zIndex: 1950 }}>
+          <div className="modal-content" style={{ maxWidth: '480px', padding: '24px' }}>
+            <div className="modal-header">
+              <span className="modal-title">Редактирование списания</span>
+              <button onClick={() => setEditingWriteOff(null)} className="modal-close">
+                &times;
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.01)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '4px' }}>Списанная деталь:</p>
+              <strong style={{ fontSize: '16px', display: 'block', marginBottom: '4px' }}>{editingWriteOff.part_name}</strong>
+              <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'monospace', display: 'block' }}>
+                Артикул: {editingWriteOff.part_article}
+              </span>
+            </div>
+
+            <form onSubmit={handleSaveWriteOffEdit}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                <div className="input-group">
+                  <label className="input-label">Кол-во списания *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="input-field"
+                    value={editWriteOffQty}
+                    onChange={(e) => setEditWriteOffQty(e.target.value)}
+                    required
+                  />
+                </div>
+                
+                <div className="input-group">
+                  <label className="input-label">Кто списал *</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={editWriteOffBy}
+                    onChange={(e) => setEditWriteOffBy(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '15px' }}>
+                <label className="input-label">Устройство фиксации (нельзя изменить)</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  value={editingWriteOff.device || 'Неизвестно'}
+                  disabled
+                  style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed' }}
+                />
+              </div>
+
+              <div className="input-group" style={{ marginBottom: '20px' }}>
+                <label className="input-label">Причина / На что списано *</label>
+                <textarea
+                  className="input-field"
+                  placeholder="Обязательно укажите причину списания..."
+                  style={{ minHeight: '80px', fontFamily: 'inherit', padding: '8px 12px' }}
+                  value={editWriteOffComment}
+                  onChange={(e) => setEditWriteOffComment(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setEditingWriteOff(null)}
+                  className="btn btn-secondary"
+                  style={{ minHeight: '40px' }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ minHeight: '40px' }}
+                  disabled={savingWriteOffEdit}
+                >
+                  {savingWriteOffEdit ? 'Сохранение...' : 'Сохранить изменения'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
