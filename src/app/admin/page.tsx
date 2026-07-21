@@ -365,6 +365,53 @@ export default function AdminDashboardPage() {
     }
   };
 
+  // Отмена списания (возврат остатков на склад и удаление записи)
+  const handleCancelWriteOff = async (item: WriteOff) => {
+    const confirmCancel = window.confirm(
+      `Вы уверены, что хотите ОТМЕНИТЬ списание детали "${item.part_name}" (${item.quantity} шт.)?\n` +
+      `Количество деталей на складе увеличится на ${item.quantity} шт.`
+    );
+    if (!confirmCancel) return;
+
+    try {
+      // 1. Возвращаем детали на склад (если деталь существует)
+      if (item.part_id) {
+        const { data: partData, error: partError } = await supabase
+          .from('parts')
+          .select('quantity')
+          .eq('id', item.part_id)
+          .single();
+
+        if (!partError && partData) {
+          const restoredQty = (partData.quantity ?? 0) + item.quantity;
+          const { error: restoreError } = await supabase
+            .from('parts')
+            .update({ quantity: restoredQty })
+            .eq('id', item.part_id);
+
+          if (restoreError) throw restoreError;
+        } else {
+          console.warn('Деталь не найдена на складе. Списание будет удалено без восстановления остатков.');
+        }
+      }
+
+      // 2. Удаляем запись списания из базы
+      const { error: deleteError } = await supabase
+        .from('write_offs')
+        .delete()
+        .eq('id', item.id);
+
+      if (deleteError) throw deleteError;
+
+      alert('Списание успешно отменено, остатки на складе восстановлены!');
+      fetchParts();
+      fetchWriteOffs();
+    } catch (err: any) {
+      console.error('Ошибка отмены списания:', err);
+      alert('Не удалось отменить списание.');
+    }
+  };
+
   // Обработка выбора файла для обрезки
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, target: 'new' | 'edit') => {
     const file = e.target.files?.[0];
@@ -1524,13 +1571,24 @@ export default function AdminDashboardPage() {
                         </td>
                         <td style={{ fontWeight: '600' }}>{item.created_by}</td>
                         <td>
-                          <button
-                            onClick={() => handleOpenEditWriteOff(item)}
-                            className="btn btn-sm btn-secondary"
-                            style={{ minHeight: 'auto', padding: '4px 10px', fontSize: '13px' }}
-                          >
-                            Изменить
-                          </button>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={() => handleOpenEditWriteOff(item)}
+                              className="btn btn-sm btn-secondary"
+                              style={{ minHeight: 'auto', padding: '4px 10px', fontSize: '13px' }}
+                            >
+                              Изменить
+                            </button>
+                            {adminRole === 'admin' && (
+                              <button
+                                onClick={() => handleCancelWriteOff(item)}
+                                className="btn btn-sm btn-danger"
+                                style={{ minHeight: 'auto', padding: '4px 10px', fontSize: '13px', backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: '#ffffff' }}
+                              >
+                                Отменить
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
