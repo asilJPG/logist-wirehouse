@@ -245,10 +245,57 @@ export default function AdminDashboardPage() {
     return 'Устройство';
   };
 
-  // Экспорт журнала списаний в Excel
+  // Экспорт журнала списаний в более подробный и проработанный Excel
   const handleExportToExcel = () => {
     try {
-      const dataToExport = writeoffs.map((item) => {
+      if (writeoffs.length === 0) {
+        alert('Журнал списаний пуст. Нет данных для экспорта.');
+        return;
+      }
+
+      const nowStr = new Date().toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      // ==========================================
+      // 1. Формирование Листа 1: "Журнал списаний"
+      // ==========================================
+      const sheetData: any[][] = [];
+
+      // Заголовок документа
+      sheetData.push(['ОТЧЕТ ПО СПИСАНИЯМ И ПРОДАЖАМ ЗАПЧАСТЕЙ']);
+      sheetData.push([`Дата формирования: ${nowStr}`]);
+      sheetData.push([`Всего записей: ${writeoffs.length}`]);
+      sheetData.push([]); // Пустая строка для отступа
+
+      // Шапка таблицы
+      sheetData.push([
+        '№',
+        'Дата и время',
+        'Наименование запчасти',
+        'Артикул',
+        'Кол-во (шт)',
+        'Цена UZS (сум)',
+        'Сумма UZS (сум)',
+        'Цена USD ($)',
+        'Сумма USD ($)',
+        'Причина / Назначение',
+        'Устройство',
+        'Сотрудник'
+      ]);
+
+      let totalQty = 0;
+      let totalSumUzs = 0;
+      let totalSumUsd = 0;
+
+      // Группировка статистики по сотрудникам для Листа 2
+      const employeeStats: { [name: string]: { count: number; qty: number; uzs: number; usd: number } } = {};
+
+      writeoffs.forEach((item, index) => {
         const formattedDate = new Date(item.created_at).toLocaleString('ru-RU', {
           day: '2-digit',
           month: '2-digit',
@@ -256,28 +303,131 @@ export default function AdminDashboardPage() {
           hour: '2-digit',
           minute: '2-digit',
         });
+        const qty = item.quantity;
         const priceUzs = item.price_uzs ?? 0;
         const priceUsd = item.price_usd ?? 0;
-        const qty = item.quantity;
-        return {
-          'Дата / Время': formattedDate,
-          'Название запчасти': item.part_name,
-          'Артикул': item.part_article,
-          'Количество': -qty,
-          'Цена продажи UZS': priceUzs,
-          'Сумма продажи UZS': priceUzs * qty,
-          'Цена продажи USD': priceUsd,
-          'Сумма продажи USD': priceUsd * qty,
-          'Причина / Комментарий': item.comment || '',
-          'Устройство': item.device || 'Неизвестно',
-          'Кто списал': item.created_by
-        };
+        const sumUzs = priceUzs * qty;
+        const sumUsd = priceUsd * qty;
+
+        totalQty += qty;
+        totalSumUzs += sumUzs;
+        totalSumUsd += sumUsd;
+
+        const empName = item.created_by || 'Неизвестно';
+        if (!employeeStats[empName]) {
+          employeeStats[empName] = { count: 0, qty: 0, uzs: 0, usd: 0 };
+        }
+        employeeStats[empName].count += 1;
+        employeeStats[empName].qty += qty;
+        employeeStats[empName].uzs += sumUzs;
+        employeeStats[empName].usd += sumUsd;
+
+        sheetData.push([
+          index + 1,
+          formattedDate,
+          item.part_name,
+          item.part_article,
+          qty,
+          priceUzs,
+          sumUzs,
+          priceUsd,
+          sumUsd,
+          item.comment || '—',
+          item.device || 'Неизвестно',
+          empName
+        ]);
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      // Итоговая строка внизу таблицы
+      sheetData.push([]);
+      sheetData.push([
+        'ИТОГО:',
+        '',
+        '',
+        '',
+        totalQty,
+        '',
+        totalSumUzs,
+        '',
+        totalSumUsd,
+        '',
+        '',
+        ''
+      ]);
+
+      const wsMain = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Оптимальная ширина колонок для комфортного чтения
+      wsMain['!cols'] = [
+        { wch: 6 },  // №
+        { wch: 18 }, // Дата и время
+        { wch: 32 }, // Наименование запчасти
+        { wch: 18 }, // Артикул
+        { wch: 14 }, // Кол-во
+        { wch: 16 }, // Цена UZS
+        { wch: 18 }, // Сумма UZS
+        { wch: 14 }, // Цена USD
+        { wch: 16 }, // Сумма USD
+        { wch: 35 }, // Причина
+        { wch: 16 }, // Устройство
+        { wch: 22 }  // Сотрудник
+      ];
+
+      // ===============================================
+      // 2. Формирование Листа 2: "Итоги по сотрудникам"
+      // ===============================================
+      const empSheetData: any[][] = [];
+      empSheetData.push(['ИТОГИ СПИСАНИЙ ПО СОТРУДНИКАМ']);
+      empSheetData.push([`Дата формирования: ${nowStr}`]);
+      empSheetData.push([]);
+      empSheetData.push([
+        '№',
+        'ФИО Сотрудника',
+        'Кол-во операций',
+        'Всего списано (шт)',
+        'Общая сумма UZS (сум)',
+        'Общая сумма USD ($)'
+      ]);
+
+      Object.keys(employeeStats).forEach((empName, i) => {
+        const stat = employeeStats[empName];
+        empSheetData.push([
+          i + 1,
+          empName,
+          stat.count,
+          stat.qty,
+          stat.uzs,
+          stat.usd
+        ]);
+      });
+
+      empSheetData.push([]);
+      empSheetData.push([
+        'ИТОГО ПО ВСЕМ:',
+        '',
+        writeoffs.length,
+        totalQty,
+        totalSumUzs,
+        totalSumUsd
+      ]);
+
+      const wsEmp = XLSX.utils.aoa_to_sheet(empSheetData);
+      wsEmp['!cols'] = [
+        { wch: 6 },  // №
+        { wch: 25 }, // ФИО Сотрудника
+        { wch: 18 }, // Кол-во операций
+        { wch: 20 }, // Всего списано (шт)
+        { wch: 22 }, // Общая сумма UZS
+        { wch: 20 }  // Общая сумма USD
+      ];
+
+      // Создание Excel-книги с двумя листами
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Списания');
-      XLSX.writeFile(workbook, `Журнал_списаний_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.utils.book_append_sheet(workbook, wsMain, 'Журнал списаний');
+      XLSX.utils.book_append_sheet(workbook, wsEmp, 'Итоги по сотрудникам');
+
+      const fileName = `Отчет_списаний_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
     } catch (err) {
       console.error('Ошибка экспорта в Excel:', err);
       alert('Не удалось экспортировать файл в Excel.');
