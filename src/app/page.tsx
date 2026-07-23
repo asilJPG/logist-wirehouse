@@ -167,19 +167,28 @@ export default function HomePage() {
       setError(null);
 
       // 1. Записываем в журнал списаний с трекингом ФИО, времени, устройства и фактической цены продажи
-      const { error: logError } = await supabase.from('write_offs').insert([
-        {
-          part_id: writeOffPart.id,
-          part_name: writeOffPart.name,
-          part_article: writeOffPart.article,
-          quantity: qtyToSubtract,
-          comment: writeOffComment.trim(),
-          created_by: adminName,
-          device: getDeviceName(),
-          price_uzs: salePriceUzs,
-          price_usd: salePriceUsd,
-        },
-      ]);
+      const writeOffPayload: any = {
+        part_id: writeOffPart.id,
+        part_name: writeOffPart.name,
+        part_article: writeOffPart.article,
+        quantity: qtyToSubtract,
+        comment: writeOffComment.trim(),
+        created_by: adminName,
+        device: getDeviceName(),
+        price_uzs: salePriceUzs,
+        price_usd: salePriceUsd,
+      };
+
+      let { error: logError } = await supabase.from('write_offs').insert([writeOffPayload]);
+
+      // Резервный алгоритм: если на сервере Supabase еще не были созданы колонки price_uzs / price_usd
+      if (logError) {
+        console.warn('Ошибка записи с ценами продажи в Supabase, повтор без полей цен:', logError);
+        delete writeOffPayload.price_uzs;
+        delete writeOffPayload.price_usd;
+        const retryResult = await supabase.from('write_offs').insert([writeOffPayload]);
+        logError = retryResult.error;
+      }
 
       if (logError) throw logError;
 
@@ -200,7 +209,8 @@ export default function HomePage() {
       fetchParts();
     } catch (err: any) {
       console.error('Ошибка списания детали:', err);
-      alert('Не удалось провести списание. Проверьте интернет-соединение.');
+      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось провести списание. Проверьте интернет-соединение.';
+      alert(`Ошибка при списании: ${errMsg}`);
     }
   };
 

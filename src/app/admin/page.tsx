@@ -323,16 +323,29 @@ export default function AdminDashboardPage() {
       const diff = newQty - oldQty;
 
       // 1. Обновляем запись списания в базе (включая цены)
-      const { error: updateLogError } = await supabase
+      const writeOffPayload: any = {
+        quantity: newQty,
+        comment: editWriteOffComment.trim(),
+        created_by: editWriteOffBy.trim(),
+        price_uzs: salePriceUzs,
+        price_usd: salePriceUsd,
+      };
+
+      let { error: updateLogError } = await supabase
         .from('write_offs')
-        .update({
-          quantity: newQty,
-          comment: editWriteOffComment.trim(),
-          created_by: editWriteOffBy.trim(),
-          price_uzs: salePriceUzs,
-          price_usd: salePriceUsd,
-        })
+        .update(writeOffPayload)
         .eq('id', editingWriteOff.id);
+
+      if (updateLogError) {
+        console.warn('Ошибка обновления с ценами в Supabase, повтор без полей цен:', updateLogError);
+        delete writeOffPayload.price_uzs;
+        delete writeOffPayload.price_usd;
+        const retryResult = await supabase
+          .from('write_offs')
+          .update(writeOffPayload)
+          .eq('id', editingWriteOff.id);
+        updateLogError = retryResult.error;
+      }
 
       if (updateLogError) throw updateLogError;
 
@@ -359,7 +372,8 @@ export default function AdminDashboardPage() {
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка сохранения списания:', err);
-      alert('Не удалось обновить запись списания.');
+      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось обновить запись списания.';
+      alert(`Ошибка обновления списания: ${errMsg}`);
     } finally {
       setSavingWriteOffEdit(false);
     }
@@ -920,19 +934,28 @@ export default function AdminDashboardPage() {
       setSuccessMessage(null);
 
       // 1. Записываем в журнал списаний с обязательным комментарием, трекингом устройства и ценами
-      const { error: logError } = await supabase.from('write_offs').insert([
-        {
-          part_id: writeOffPart.id,
-          part_name: writeOffPart.name,
-          part_article: writeOffPart.article,
-          quantity: qtyToSubtract,
-          comment: writeOffComment.trim(),
-          created_by: writeOffBy.trim() || 'Администратор',
-          device: getDeviceName(),
-          price_uzs: salePriceUzs,
-          price_usd: salePriceUsd,
-        },
-      ]);
+      const writeOffPayload: any = {
+        part_id: writeOffPart.id,
+        part_name: writeOffPart.name,
+        part_article: writeOffPart.article,
+        quantity: qtyToSubtract,
+        comment: writeOffComment.trim(),
+        created_by: writeOffBy.trim() || 'Администратор',
+        device: getDeviceName(),
+        price_uzs: salePriceUzs,
+        price_usd: salePriceUsd,
+      };
+
+      let { error: logError } = await supabase.from('write_offs').insert([writeOffPayload]);
+
+      // Резервный алгоритм: если на сервере Supabase еще не были созданы колонки price_uzs / price_usd
+      if (logError) {
+        console.warn('Ошибка записи с ценами продажи в Supabase, повтор без полей цен:', logError);
+        delete writeOffPayload.price_uzs;
+        delete writeOffPayload.price_usd;
+        const retryResult = await supabase.from('write_offs').insert([writeOffPayload]);
+        logError = retryResult.error;
+      }
 
       if (logError) throw logError;
 
@@ -953,7 +976,8 @@ export default function AdminDashboardPage() {
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка при списании:', err);
-      alert('Не удалось провести списание. Проверьте интернет-соединение.');
+      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось провести списание. Проверьте интернет-соединение.';
+      alert(`Ошибка при списании: ${errMsg}`);
     }
   };
 
