@@ -1185,7 +1185,10 @@ export default function AdminDashboardPage() {
           <h1 style={{ fontSize: '32px' }}>Панель управления складом</h1>
           <p style={{ color: 'var(--text-muted)' }}>Сотрудник: <strong>{adminName}</strong></p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button onClick={() => router.push('/')} className="btn btn-secondary">
+            🏠 Главный экран
+          </button>
           {adminRole === 'admin' && (
             <button onClick={() => setShowAdminsModal(true)} className="btn btn-secondary">
               👥 Доступы сотрудников
