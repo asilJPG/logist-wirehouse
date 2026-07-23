@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { formatUserFriendlyError } from '@/lib/errorHandler';
 
 interface Part {
   id: string;
@@ -62,7 +63,7 @@ export default function HomePage() {
       setParts(list);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
-      setError('Не удалось загрузить список запчастей. Проверьте интернет-соединение или обновите страницу.');
+      setError(formatUserFriendlyError(err, 'Не удалось загрузить список запчастей'));
     } finally {
       setLoading(false);
     }
@@ -142,24 +143,28 @@ export default function HomePage() {
 
     const qtyToSubtract = parseInt(writeOffQty, 10);
     if (isNaN(qtyToSubtract) || qtyToSubtract <= 0) {
-      alert('Введите корректное количество для списания.');
+      alert('Пожалуйста, укажите количество для списания (больше 0).');
       return;
     }
 
     if (qtyToSubtract > writeOffPart.quantity) {
-      alert(`Недостаточно товара на складе. Доступно для списания: ${writeOffPart.quantity} шт.`);
+      alert(`Недостаточно товара на складе. В наличии всего: ${writeOffPart.quantity} шт.`);
       return;
     }
 
     if (!writeOffComment.trim()) {
-      alert('Пожалуйста, укажите комментарий (на что списана деталь).');
+      alert('Пожалуйста, обязательно напишите причину списания (комментарий).');
       return;
     }
 
     const salePriceUzs = parseFloat(writeOffPriceUZS);
     const salePriceUsd = parseFloat(writeOffPriceUSD);
-    if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
-      alert('Введите корректную цену продажи.');
+    if (isNaN(salePriceUzs) || salePriceUzs < 0) {
+      alert('Пожалуйста, укажите корректную цену продажи в сумах.');
+      return;
+    }
+    if (isNaN(salePriceUsd) || salePriceUsd < 0) {
+      alert('Пожалуйста, укажите корректную цену продажи в долларах.');
       return;
     }
 
@@ -209,8 +214,7 @@ export default function HomePage() {
       fetchParts();
     } catch (err: any) {
       console.error('Ошибка списания детали:', err);
-      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось провести списание. Проверьте интернет-соединение.';
-      alert(`Ошибка при списании: ${errMsg}`);
+      alert(formatUserFriendlyError(err, 'Не удалось провести списание детали'));
     }
   };
 

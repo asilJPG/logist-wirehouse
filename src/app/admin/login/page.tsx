@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { formatUserFriendlyError } from '@/lib/errorHandler';
 
 export default function AdminLoginPage() {
   const [password, setPassword] = useState('');
@@ -29,7 +30,7 @@ export default function AdminLoginPage() {
     const enteredPassword = password.trim();
 
     if (!enteredPassword) {
-      setError('Пожалуйста, введите пароль.');
+      setError('Пожалуйста, введите ваш личный пароль.');
       setSigningIn(false);
       return;
     }
@@ -42,11 +43,11 @@ export default function AdminLoginPage() {
         .eq('password', enteredPassword);
 
       if (dbError) {
-        throw new Error('Не удалось подключиться к серверу. Пожалуйста, проверьте интернет.');
+        throw dbError;
       }
 
       if (!adminsData || adminsData.length === 0) {
-        setError('Неверный пароль. Доступ запрещен.');
+        setError('Неверный пароль. Пожалуйста, проверьте введённые данные.');
         setSigningIn(false);
         return;
       }
@@ -61,7 +62,7 @@ export default function AdminLoginPage() {
       router.push('/');
     } catch (err: any) {
       console.error('Ошибка входа:', err);
-      setError('Не удалось войти. Проверьте пароль или подключение к интернету.');
+      setError(formatUserFriendlyError(err, 'Произошла ошибка при попытке входа'));
     } finally {
       setSigningIn(false);
     }

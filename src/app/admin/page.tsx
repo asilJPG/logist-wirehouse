@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
+import { formatUserFriendlyError } from '@/lib/errorHandler';
 
 interface Part {
   id: string;
@@ -199,7 +200,7 @@ export default function AdminDashboardPage() {
       setTempQuantities(quantities);
     } catch (err: any) {
       console.error('Ошибка загрузки данных:', err);
-      setError('Не удалось загрузить данные со склада. Проверьте интернет-соединение.');
+      setError(formatUserFriendlyError(err, 'Не удалось загрузить данные со склада'));
     } finally {
       setPartsLoading(false);
     }
@@ -451,19 +452,19 @@ export default function AdminDashboardPage() {
 
     const newQty = parseInt(editWriteOffQty, 10);
     if (isNaN(newQty) || newQty <= 0) {
-      alert('Введите корректное количество.');
+      alert('Пожалуйста, укажите количество для списания (больше 0).');
       return;
     }
 
     if (!editWriteOffComment.trim()) {
-      alert('Укажите причину списания.');
+      alert('Пожалуйста, обязательно напишите причину списания.');
       return;
     }
 
     const salePriceUzs = parseFloat(editWriteOffPriceUZS);
     const salePriceUsd = parseFloat(editWriteOffPriceUSD);
     if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
-      alert('Введите корректные цены.');
+      alert('Пожалуйста, введите корректные цены продажи.');
       return;
     }
 
@@ -522,8 +523,7 @@ export default function AdminDashboardPage() {
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка сохранения списания:', err);
-      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось обновить запись списания.';
-      alert(`Ошибка обновления списания: ${errMsg}`);
+      alert(formatUserFriendlyError(err, 'Не удалось обновить запись списания'));
     } finally {
       setSavingWriteOffEdit(false);
     }
@@ -605,7 +605,7 @@ export default function AdminDashboardPage() {
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка отмены списания:', err);
-      alert('Не удалось отменить списание.');
+      alert(formatUserFriendlyError(err, 'Не удалось отменить списание'));
     }
   };
 
@@ -762,7 +762,7 @@ export default function AdminDashboardPage() {
       return urlData.publicUrl;
     } catch (err: any) {
       console.error('Ошибка загрузки файла в хранилище:', err);
-      alert('Не удалось сохранить фотографию. Пожалуйста, проверьте соединение с интернетом или настройки хранилища.');
+      alert(formatUserFriendlyError(err, 'Не удалось сохранить фотографию запчасти'));
       return null;
     }
   };
@@ -771,7 +771,7 @@ export default function AdminDashboardPage() {
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdminUsername.trim() || !newAdminPassword.trim()) {
-      alert('Пожалуйста, заполните имя и пароль.');
+      alert('Пожалуйста, заполните имя сотрудника и его личный пароль.');
       return;
     }
 
@@ -794,7 +794,7 @@ export default function AdminDashboardPage() {
       fetchAdmins();
     } catch (err: any) {
       console.error('Ошибка при добавлении сотрудника:', err);
-      alert('Не удалось добавить сотрудника. Возможно, имя уже занято или отсутствует интернет-связь.');
+      alert(formatUserFriendlyError(err, 'Не удалось добавить нового сотрудника'));
     } finally {
       setAddingAdmin(false);
     }
@@ -813,7 +813,7 @@ export default function AdminDashboardPage() {
       fetchAdmins();
     } catch (err: any) {
       console.error('Ошибка удаления сотрудника:', err);
-      alert('Не удалось удалить сотрудника. Проверьте подключение к интернету.');
+      alert(formatUserFriendlyError(err, 'Не удалось удалить сотрудника'));
     }
   };
 
@@ -829,13 +829,13 @@ export default function AdminDashboardPage() {
     const qtyNum = parseInt(newQuantity, 10);
 
     if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
-      setError('Пожалуйста, введите корректные цены.');
+      setError('Пожалуйста, укажите корректные цены товара (не отрицательные).');
       setAddingPart(false);
       return;
     }
 
     if (isNaN(qtyNum) || qtyNum < 0) {
-      setError('Пожалуйста, введите корректное количество.');
+      setError('Пожалуйста, укажите корректное количество товара на складе.');
       setAddingPart(false);
       return;
     }
@@ -892,7 +892,7 @@ export default function AdminDashboardPage() {
       fetchParts();
     } catch (err: any) {
       console.error('Ошибка добавления детали:', err);
-      setError('Не удалось добавить деталь на склад. Пожалуйста, проверьте введённые данные или интернет-соединение.');
+      setError(formatUserFriendlyError(err, 'Не удалось добавить деталь на склад'));
     } finally {
       setAddingPart(false);
     }
@@ -928,13 +928,13 @@ export default function AdminDashboardPage() {
     const qtyNum = parseInt(editQuantity, 10);
 
     if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
-      setError('Введите корректные цены.');
+      setError('Пожалуйста, введите корректные цены товара.');
       setSavingEdit(false);
       return;
     }
 
     if (isNaN(qtyNum) || qtyNum < 0) {
-      setError('Введите корректное количество.');
+      setError('Пожалуйста, введите корректное количество товара.');
       setSavingEdit(false);
       return;
     }
@@ -974,7 +974,7 @@ export default function AdminDashboardPage() {
       fetchParts();
     } catch (err: any) {
       console.error('Ошибка обновления детали:', err);
-      setError('Не удалось сохранить изменения. Пожалуйста, проверьте введённые данные или интернет-соединение.');
+      setError(formatUserFriendlyError(err, 'Не удалось сохранить изменения детали'));
     } finally {
       setSavingEdit(false);
     }
@@ -988,7 +988,7 @@ export default function AdminDashboardPage() {
     const priceUsdNum = parseFloat(rawValUSD);
 
     if (isNaN(priceUzsNum) || priceUzsNum < 0 || isNaN(priceUsdNum) || priceUsdNum < 0) {
-      alert('Введите корректные цены.');
+      alert('Пожалуйста, введите корректные цены (не отрицательные).');
       return;
     }
 
@@ -1010,14 +1010,14 @@ export default function AdminDashboardPage() {
       alert(`Цены для "${name}" успешно обновлены.`);
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения цены:', err);
-      alert('Не удалось обновить цены. Пожалуйста, проверьте интернет-соединение.');
+      alert(formatUserFriendlyError(err, 'Не удалось обновить цены товара'));
     }
   };
 
   // Быстрое изменение количества (inline)
   const handleQuickQuantitySave = async (id: string, quantity: number, name: string) => {
     if (quantity < 0) {
-      alert('Количество не может быть меньше 0.');
+      alert('Количество товара на складе не может быть меньше 0.');
       return;
     }
 
@@ -1036,7 +1036,7 @@ export default function AdminDashboardPage() {
       setTempQuantities({ ...tempQuantities, [id]: quantity.toString() });
     } catch (err: any) {
       console.error('Ошибка быстрого сохранения количества:', err);
-      alert('Не удалось обновить количество товара. Пожалуйста, проверьте интернет-соединение.');
+      alert(formatUserFriendlyError(err, 'Не удалось обновить количество товара'));
     }
   };
 
@@ -1058,24 +1058,24 @@ export default function AdminDashboardPage() {
 
     const qtyToSubtract = parseInt(writeOffQty, 10);
     if (isNaN(qtyToSubtract) || qtyToSubtract <= 0) {
-      alert('Введите корректное количество для списания.');
+      alert('Пожалуйста, укажите количество товара для списания (больше 0).');
       return;
     }
 
     if (qtyToSubtract > writeOffPart.quantity) {
-      alert(`Недостаточно товара на складе. Доступно для списания: ${writeOffPart.quantity} шт.`);
+      alert(`Недостаточно товара на складе. В наличии всего: ${writeOffPart.quantity} шт.`);
       return;
     }
 
     if (!writeOffComment.trim()) {
-      alert('Пожалуйста, укажите причину списания детали (комментарий).');
+      alert('Пожалуйста, обязательно укажите причину списания детали (комментарий).');
       return;
     }
 
     const salePriceUzs = parseFloat(writeOffPriceUZS);
     const salePriceUsd = parseFloat(writeOffPriceUSD);
     if (isNaN(salePriceUzs) || salePriceUzs < 0 || isNaN(salePriceUsd) || salePriceUsd < 0) {
-      alert('Введите корректные цены.');
+      alert('Пожалуйста, укажите корректные цены продажи.');
       return;
     }
 
@@ -1126,8 +1126,7 @@ export default function AdminDashboardPage() {
       fetchWriteOffs();
     } catch (err: any) {
       console.error('Ошибка при списании:', err);
-      const errMsg = err?.message || err?.details || err?.hint || 'Не удалось провести списание. Проверьте интернет-соединение.';
-      alert(`Ошибка при списании: ${errMsg}`);
+      alert(formatUserFriendlyError(err, 'Не удалось провести списание детали'));
     }
   };
 
@@ -1151,7 +1150,7 @@ export default function AdminDashboardPage() {
       fetchParts();
     } catch (err: any) {
       console.error('Ошибка удаления детали:', err);
-      setError('Не удалось удалить деталь со склада. Проверьте подключение к интернету.');
+      setError(formatUserFriendlyError(err, 'Не удалось удалить деталь со склада'));
     }
   };
 
